@@ -16,7 +16,8 @@
 <a href="https://docs.trytrellis.app/zh">官方文档</a> •
 <a href="#快速开始">快速开始</a> •
 <a href="#工作流总览">工作流总览</a> •
-<a href="#目录结构">目录结构</a>
+<a href="#目录结构">目录结构</a> •
+<a href="https://linux.do">LinuxDo</a>
 </p>
 
 <p align="center">
