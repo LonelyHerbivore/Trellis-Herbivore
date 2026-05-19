@@ -195,6 +195,12 @@
 npm install -g trellis-hgl@latest
 ```
 
+### 卸载
+
+```bash
+npm uninstall -g trellis-hgl
+```
+
 ### 初始化仓库
 
 ```bash
