@@ -192,7 +192,7 @@
 ### 安装
 
 ```bash
-npm install -g trellis-hgl@latest
+npm install -g trellis-hgl@beta
 ```
 
 ### 卸载
@@ -201,11 +201,30 @@ npm install -g trellis-hgl@latest
 npm uninstall -g trellis-hgl
 ```
 
+### 替换原版trellis
+
+```bash
+# 卸载旧版 trellis
+npm uninstall -g @mindfoldhq/trellis
+
+# 安装最新版 trellis-hgl
+npm install -g trellis-hgl@beta
+
+# 进入你自己的项目目录
+cd /path/to/your/project
+
+# 已经初始化过的项目，执行更新（按需选择文件是否OverWrite）
+trellis update
+
+# 第一次使用的项目，执行初始化
+trellis init -u yourname --claude
+```
+
 ### 初始化仓库
 
 ```bash
 # 创建开发者 workspace
-trellis init -u your-name
+trellis init -u your-name --claude
 ```
 
 如果你需要按平台生成接入文件，也可以组合初始化参数；但这个分支的默认关注点是 Claude Code 路径。
