@@ -1242,9 +1242,11 @@ describe("regression: current-task path normalization", () => {
   const copilotSessionStart = getCopilotHooks().find(
     (hook) => hook.name === "session-start.py",
   )?.content;
-  it("[session-current-task] session-start template guides Claude Code planning from brainstorm to grill-me-style follow-up", () => {
+  it("[session-current-task] session-start template keeps trellis-grill-me as a required Claude Code planning gate", () => {
     expect(claudeSessionStart).toContain("guide the user to `task.py create` first");
-    expect(workflowMdTemplate).toContain("`trellis-grill-me`");
+    expect(workflowMdTemplate).toContain("Planning order for this Claude Code path: `task.py create` → `trellis-brainstorm` → `trellis-grill-me` → development strategy decision.");
+    expect(workflowMdTemplate).toContain("`trellis-grill-me` is a required planning gate on this Claude Code path, not an optional suggestion.");
+    expect(workflowMdTemplate).toContain("Before `trellis-grill-me` is complete, do not enter development strategy decisions, do not create or complete `design.md` / `implement.md`, and do not run `task.py start`.");
   });
 
   beforeEach(() => {

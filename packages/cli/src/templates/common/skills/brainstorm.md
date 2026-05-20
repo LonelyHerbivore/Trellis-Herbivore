@@ -47,10 +47,10 @@ Use a concise title from the user's request. Use a slug without a date prefix. `
 4. Ask the single highest-value remaining question.
 5. Include your recommended answer with the question.
 6. After each user answer, update `prd.md` before continuing.
-7. Once repository-answerable questions are exhausted, tighten the remaining requirement gaps with `trellis-grill-me`: one question at a time, each with a recommendation, while still updating `prd.md` after each answer.
-8. Do not switch into development strategy decisions until the requirement-clarification pass has converged in `prd.md`.
+7. Once repository-answerable questions are exhausted, enter `trellis-grill-me` and tighten the remaining requirement gaps one question at a time, each with a recommendation, while still updating `prd.md` after each answer.
+8. On the Claude Code path, `trellis-grill-me` is a required planning gate. Before it is complete, do not switch into development strategy decisions, do not create or complete `design.md` / `implement.md`, and do not run `task.py start`.
 9. Before implementation starts on the Claude Code path, record the development strategy decisions in the task documents: development mode, branch vs worktree, default flow vs TDD. Lightweight tasks may keep that record in `prd.md`; complex tasks should keep it in `implement.md` together with the review-gate plan: `trellis-spec-review` → `trellis-code-review` → `trellis-code-architecture-review`. If the strategy is `subagent + worktree`, pin `./.claude/worktree`. If the strategy is TDD, record `trellis-tdd` as the reference flow. Also ask: "是否需要在开发前进行架构指导？" — if yes, dispatch `trellis-improve-codebase-architecture` with `架构审查模式: guidance` before `task.py start`, append its output to `design.md`, and add `架构审查：enabled` plus `trellis-improve-codebase-architecture（深度）` to the review-gate order in `implement.md`.
-10. For complex tasks, create or update `design.md` and `implement.md` before implementation starts.
+10. For complex tasks, create or update `design.md` and `implement.md` only after `trellis-grill-me` is complete and implementation is about to start.
 
 Do not invent a project-specific product/spec hierarchy. If the repository already has product, domain, or spec docs, use them. If it does not, proceed with the evidence that exists.
 

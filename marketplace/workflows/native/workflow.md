@@ -186,8 +186,10 @@ Multi-deliverable scope: consider a parent task plus independently verifiable ch
 Sub-agent mode: curate `implement.jsonl` and `check.jsonl` as spec/research manifests before start.
 
 Planning order for this Claude Code path: `task.py create` → `trellis-brainstorm` → `trellis-grill-me` → development strategy decision.
+`trellis-grill-me` is a required planning gate on this Claude Code path, not an optional suggestion.
+Before `trellis-grill-me` is complete, do not enter development strategy decisions, do not create or complete `design.md` / `implement.md`, and do not run `task.py start`.
 Do not enter development strategy decisions until `prd.md` has been tightened through repository-first clarification and one-question-at-a-time follow-up.
-Before `task.py start`, record the development strategy decisions in the task documents. Complex tasks should store them in `implement.md`: development mode (current session / subagent), branch vs worktree, default flow vs TDD, plus the planned review-gate order: `trellis-spec-review` → `trellis-code-review` → `trellis-code-architecture-review`. If the strategy is `subagent + worktree`, pin the shared path to `./.claude/worktree` and require every code-development subagent to use it. If the strategy is TDD, record `trellis-tdd` as the reference flow.
+Before `task.py start`, record the development strategy decisions in the task documents. Complex tasks should store them in `implement.md`: development mode (current session / subagent), branch vs worktree, default flow vs TDD, plus the planned review-gate order: `trellis-spec-review` → `trellis-code-review` → `trellis-code-architecture-review`. If the strategy is `subagent + worktree`, pin the shared path to `./.claude/worktree` and require every code-development subagent to use it. If the strategy is TDD, record `trellis-tdd` as the reference flow. If the task has `架构审查：enabled` in `implement.md`, dispatch `trellis-improve-codebase-architecture` with `架构审查模式: guidance` before `task.py start`, then append its output to `design.md`.
 [/workflow-state:planning]
 
 <!-- Per-turn breadcrumb: shown throughout Phase 1 when codex.dispatch_mode=inline.
@@ -212,12 +214,13 @@ Inline mode: skip jsonl curation; Phase 2 reads artifacts/specs via `trellis-bef
      Scope: all of Phase 2 + Phase 3.1-3.4 (status stays 'in_progress' from
      task.py start until task.py archive; only archive flips it). The body
      therefore must cover every required step from implementation through
-     commit, including Phase 3.3 spec update and Phase 3.4 commit. -->
+     archive / optional commit, including Phase 3.3 spec update and any
+     Phase 3.4 commit guidance when a commit is actually needed. -->
 
 Sub-agent dispatch protocol applies to all platforms and all sub-agents, including class-2 Codex/Copilot/Gemini/Qoder and `trellis-research`: every dispatch prompt starts with `Active task: <task path from task.py current>` before role-specific instructions.
 
 [workflow-state:in_progress]
-Flow: `trellis-implement` -> `trellis-check` -> `trellis-update-spec` -> commit (Phase 3.4) -> `/trellis:finish-work`.
+Flow: `trellis-implement` -> `trellis-check` -> `trellis-update-spec` -> archive or commit as needed -> `/trellis:finish-work`.
 Claude Code review-gate order: `trellis-spec-review` -> `trellis-code-review` -> `trellis-code-architecture-review`.
 Main-session default: dispatch implement/check sub-agents. Sub-agent self-exemption: if already running as `trellis-implement`, do NOT spawn another `trellis-implement` or `trellis-check`; if already running as `trellis-check`, do NOT spawn another `trellis-check` or `trellis-implement`. Dispatch is main session only.
 Dispatch prompt starts with `Active task: <task path from task.py current>`. Read context: jsonl entries -> `prd.md` -> `design.md if present` -> `implement.md if present`.
@@ -225,6 +228,8 @@ Dispatch prompt starts with `Active task: <task path from task.py current>`. Rea
 If the chosen strategy is `subagent + worktree`, all code-development subagents must use the same `./.claude/worktree` path.
 If the chosen strategy is TDD, align implementation and review expectations to `trellis-tdd`.
 If the task is architecture-sensitive or enters structural refactoring, route the architecture pass through `trellis-improve-codebase-architecture` before widening the change.
+If `implement.md` records `架构审查：enabled`, after `trellis-code-architecture-review` passes dispatch `trellis-improve-codebase-architecture` with `架构审查模式: deep-review` plus the changed file list from `git diff --name-only <base_branch>...HEAD`. On failure, report blocking issues and return to `trellis-implement`; re-run the full review loop until deep-review passes.
+If the user asks to archive the current task, do not block on commit; archive is allowed even when code is not committed.
 [/workflow-state:in_progress]
 
 <!-- Per-turn breadcrumb: shown while status='in_progress' when
@@ -233,16 +238,17 @@ If the task is architecture-sensitive or enters structural refactoring, route th
      instead of dispatching sub-agents. -->
 
 [workflow-state:in_progress-inline]
-Flow: `trellis-before-dev` -> edit -> `trellis-check` -> validation -> `trellis-update-spec` -> commit (Phase 3.4) -> `/trellis:finish-work`.
+Flow: `trellis-before-dev` -> edit -> `trellis-check` -> validation -> `trellis-update-spec` -> archive or commit as needed -> `/trellis:finish-work`.
 Do not dispatch implement/check sub-agents in inline mode.
 Read context: `prd.md` -> `design.md if present` -> `implement.md if present`, plus relevant spec/research loaded by skills.
+If the user asks to archive the current task, do not block on commit; archive is allowed even when code is not committed.
 [/workflow-state:in_progress-inline]
 
 ### Phase 3: Finish
 - 3.1 Quality verification `[required · repeatable]`
 - 3.2 Debug retrospective `[on demand]`
 - 3.3 Spec update `[required · once]`
-- 3.4 Commit changes `[required · once]`
+- 3.4 Commit changes `[optional · once]`
 - 3.5 Merge & Final Verification `[required · once]`
 - 3.6 Wrap-up reminder
 
@@ -255,7 +261,7 @@ Read context: `prd.md` -> `design.md if present` -> `implement.md if present`, p
      channel as the live blocks. -->
 
 [workflow-state:completed]
-Code committed. Run `/trellis:finish-work`; if dirty, return to Phase 3.4 first.
+Task archived or code committed. Run `/trellis:finish-work`; if more validation or wrap-up is needed, do that before closing the work.
 [/workflow-state:completed]
 
 ### Rules

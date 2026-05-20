@@ -186,6 +186,8 @@ Multi-deliverable scope: consider a parent task plus independently verifiable ch
 Sub-agent mode: curate `implement.jsonl` and `check.jsonl` as spec/research manifests before start.
 
 Planning order for this Claude Code path: `task.py create` → `trellis-brainstorm` → `trellis-grill-me` → development strategy decision.
+`trellis-grill-me` is a required planning gate on this Claude Code path, not an optional suggestion.
+Before `trellis-grill-me` is complete, do not enter development strategy decisions, do not create or complete `design.md` / `implement.md`, and do not run `task.py start`.
 Do not enter development strategy decisions until `prd.md` has been tightened through repository-first clarification and one-question-at-a-time follow-up.
 Before `task.py start`, record the development strategy decisions in the task documents. Complex tasks should store them in `implement.md`: development mode (current session / subagent), branch vs worktree, default flow vs TDD, plus the planned review-gate order: `trellis-spec-review` → `trellis-code-review` → `trellis-code-architecture-review`. If the strategy is `subagent + worktree`, pin the shared path to `./.claude/worktree` and require every code-development subagent to use it. If the strategy is TDD, record `trellis-tdd` as the reference flow. If the task has `架构审查：enabled` in `implement.md`, dispatch `trellis-improve-codebase-architecture` with `架构审查模式: guidance` before `task.py start`, then append its output to `design.md`.
 [/workflow-state:planning]

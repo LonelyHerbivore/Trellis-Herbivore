@@ -204,11 +204,15 @@ Which breadcrumbs actually fire in normal flow:
 preserve the runtime gates that cannot be recovered from model memory:
 `no_task` triages and asks for task-creation consent; planning distinguishes
 lightweight PRD-only tasks from complex tasks requiring `prd.md`, `design.md`,
-and `implement.md`; in-progress keeps the commit step reachable before
-`/trellis:finish-work`. See:
+and `implement.md`, and on the Claude Code path preserves the visible order
+`trellis-brainstorm` → `trellis-grill-me` → development strategy decision with
+an explicit gate: before `trellis-grill-me` completes, the breadcrumb must
+forbid strategy decisions, `design.md` / `implement.md`, and `task.py start`;
+in-progress keeps the commit step reachable before `/trellis:finish-work`. See:
 
 - `test that workflow.md [workflow-state:in_progress] mentions commit (Phase 3.4)`
 - `test that workflow.md [workflow-state:planning] mentions planning artifact gate`
+- `test that workflow.md [workflow-state:planning] makes trellis-grill-me a required gate`
 - `test that workflow.md [workflow-state:no_task] asks for task-creation consent`
 
 ---

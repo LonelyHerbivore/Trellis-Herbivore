@@ -213,6 +213,11 @@ describe("trellis template constants", () => {
     const planning = workflowStateBreadcrumb("planning");
     expect(planning).toContain("trellis-grill-me");
     expect(planning).toContain("development strategy decision");
+    expect(planning).toContain("`trellis-grill-me` is a required planning gate");
+    expect(planning).toContain("Before `trellis-grill-me` is complete");
+    expect(planning).toContain("do not enter development strategy decisions");
+    expect(planning).toContain("do not create or complete `design.md` / `implement.md`");
+    expect(planning).toContain("do not run `task.py start`");
     expect(planning).toContain("Do not enter development strategy decisions until `prd.md` has been tightened");
   });
 

@@ -66,6 +66,9 @@
    - `trellis-code-architecture-review`
    - 按需触发 `trellis-improve-codebase-architecture`
    - merge review 与最终 build/test
+  
+5. **随时可跳出Trellis流程**
+   - 随时都可以直接对Claude说: "当前任务直接存档"，即可跳出工作流直接结束任务
 
 ## 核心理念
 
@@ -181,6 +184,27 @@
 - `AGENTS.md`
 
 但对这个分支来说，**主要关注点默认是 Claude Code**。
+
+## Claude Code 下的自动注入
+
+以当前根目录 `Trellis-0.6.0-beta.17` 为例，自动注入主要看这 3 个文件：
+
+1. `.claude/hooks/session-start.py`
+   - 触发时机：`startup`、`clear`、`compact`
+   - 注入内容：`<session-context>`、`<first-reply-notice>`、`<current-state>`、`<trellis-workflow>`、`<guidelines>`、`<task-status>`、`<ready>`
+   - 作用：开场先把仓库状态、任务状态和 workflow 摘要喂给主会话
+
+2. `.claude/hooks/inject-workflow-state.py`
+   - 触发时机：每次用户提交消息前（`UserPromptSubmit`）
+   - 注入内容：简短的 `<workflow-state>`
+   - 作用：提示当前 task 状态和下一步该走的 workflow
+
+3. `.claude/hooks/inject-subagent-context.py`
+   - 触发时机：调用 `Task` / `Agent` 子代理前（`PreToolUse`）
+   - 注入内容：`implement.jsonl`、`check.jsonl`、`prd.md`、`design.md`、`implement.md`
+   - 作用：把任务文档自动拼进 implement / check / research 子代理的 prompt
+
+一句话：**开头看全局，发言前看状态，调子代理前看任务文件。**
 
 ## 快速开始
 
