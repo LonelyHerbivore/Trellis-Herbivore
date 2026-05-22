@@ -35,7 +35,7 @@ describe("cursor agents frontmatter single-line description", () => {
         `${name}.md`,
       );
       const content = fs.readFileSync(filePath, "utf-8");
-      const fm = content.split("---\n")[1] ?? "";
+      const fm = content.split(/---\r?\n/)[1] ?? "";
 
       // Block-scalar markers must be absent on the description line.
       expect(fm).not.toMatch(/^description:\s*\|\s*$/m);

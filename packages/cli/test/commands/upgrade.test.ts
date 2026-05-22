@@ -76,18 +76,21 @@ describe("upgrade command", () => {
   it("executes npm install for real upgrades", async () => {
     const log = vi.spyOn(console, "log").mockImplementation(() => undefined);
     const runner = vi.fn(() => ({ status: 0, signal: null }));
+    const plan = buildUpgradeCommand({ tag: "latest" }, "0.5.12", process.platform);
 
     await upgrade({ tag: "latest" }, runner);
 
     expect(runner).toHaveBeenCalledWith(
-      "cmd.exe",
-      ["/d", "/s", "/c", "npm install -g trellis-hgl@latest"],
-      { stdio: "inherit", shell: false },
+      plan.command,
+      plan.args,
+      plan.spawnOptions,
     );
     expect(log).toHaveBeenCalledWith(
       expect.stringContaining("trellis --version"),
     );
-    expect(log).toHaveBeenCalledWith(expect.stringContaining("where trellis"));
+    expect(log).toHaveBeenCalledWith(
+      expect.stringContaining(plan.binaryCheckCommand),
+    );
 
     log.mockRestore();
   });
@@ -95,10 +98,17 @@ describe("upgrade command", () => {
   it("fails when npm exits non-zero", async () => {
     const log = vi.spyOn(console, "log").mockImplementation(() => undefined);
     const runner = vi.fn(() => ({ status: 1, signal: null }));
+    const plan = buildUpgradeCommand({ tag: "latest" }, "0.5.12", process.platform);
 
-    await expect(upgrade({ tag: "latest" }, runner)).rejects.toThrow(
-      /npm install failed with exit code 1\.[\s\S]*Troubleshooting:[\s\S]*Manual command: npm install -g trellis-hgl@latest[\s\S]*npm config get prefix[\s\S]*where trellis/,
+    const error = await upgrade({ tag: "latest" }, runner).catch(
+      (reason) => reason as Error,
     );
+
+    expect(error.message).toContain("npm install failed with exit code 1.");
+    expect(error.message).toContain("Troubleshooting:");
+    expect(error.message).toContain(`Manual command: ${plan.displayCommand}`);
+    expect(error.message).toContain("npm config get prefix");
+    expect(error.message).toContain(plan.binaryCheckCommand);
 
     log.mockRestore();
   });
