@@ -60,6 +60,7 @@ export const commonTrellisConfig = readTemplate(
   "scripts/common/trellis_config.py",
 );
 export const commonSafeCommit = readTemplate("scripts/common/safe_commit.py");
+export const trellisSwitch = readTemplate("scripts/trellis_switch.py");
 
 // Python scripts - main
 export const getDeveloperScript = readTemplate("scripts/get_developer.py");
@@ -111,6 +112,7 @@ export function getAllScripts(): Map<string, string> {
   scripts.set("task.py", taskScript);
   scripts.set("get_context.py", getContextScript);
   scripts.set("add_session.py", addSessionScript);
+  scripts.set("trellis_switch.py", trellisSwitch);
 
   return scripts;
 }

@@ -1,6 +1,9 @@
 import { readFileSync, readdirSync, statSync } from "node:fs";
 import path from "node:path";
 import { AI_TOOLS } from "../types/ai-tools.js";
+import {
+  getAllCommands as getClaudeCommands,
+} from "../templates/claude/index.js";
 import { getClaudeTemplatePath } from "../templates/extract.js";
 import { ensureDir, writeFile } from "../utils/file-writer.js";
 import {
@@ -86,6 +89,12 @@ export async function configureClaude(cwd: string): Promise<void> {
   ensureDir(commandsDir);
   for (const cmd of resolveCommands(ctx)) {
     await writeFile(path.join(commandsDir, `${cmd.name}.md`), cmd.content);
+  }
+  for (const cmd of getClaudeCommands()) {
+    await writeFile(
+      path.join(commandsDir, `${cmd.name}.md`),
+      replacePythonCommandLiterals(resolvePlaceholders(cmd.content, ctx)),
+    );
   }
 
   // Auto-trigger workflow skills + multi-file built-in skills.

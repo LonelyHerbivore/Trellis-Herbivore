@@ -68,6 +68,28 @@ function pushTarget(type) {
   return type === "beta" || type === "rc" ? "HEAD" : "main";
 }
 
+function unstageIfPresent(target) {
+  try {
+    execSync(`git restore --staged -- "${target}"`, {
+      cwd: CLI_DIR,
+      env: process.env,
+      stdio: ["pipe", "pipe", "pipe"],
+      encoding: "utf-8",
+    });
+  } catch (error) {
+    const stderr = error.stderr?.toString() ?? "";
+    if (!stderr.includes("did not match any file")) {
+      throw error;
+    }
+  }
+}
+
+function stageReleaseChanges() {
+  run("git add -A .");
+  unstageIfPresent("docs-site");
+  unstageIfPresent("marketplace");
+}
+
 function main() {
   const [type = "patch"] = process.argv.slice(2);
   if (!RELEASE_TYPES.has(type)) {
@@ -79,9 +101,9 @@ function main() {
   run("pnpm --filter trellis-hgl-core test");
   run("pnpm test");
 
-  run("git add -A -- ':!docs-site' ':!marketplace'");
+  stageReleaseChanges();
   if (hasGitDiff()) {
-    run("git commit -m 'chore: pre-release updates'");
+    run('git commit -m "chore: pre-release updates"');
   }
 
   const version = output(`node scripts/bump-versions.js ${type}`);

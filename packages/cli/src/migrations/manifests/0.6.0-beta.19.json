@@ -1,0 +1,9 @@
+{
+  "version": "0.6.0-beta.19",
+  "description": "Beta patch: fix published trellis-hgl CLI metadata so the shipped core dependency pins to an exact trellis-hgl-core version instead of `workspace:*`.",
+  "breaking": false,
+  "recommendMigrate": false,
+  "changelog": "**Bug Fixes:**\n- fix(release): published `trellis-hgl` CLI metadata now pins `trellis-hgl-core` to the matching exact beta version instead of shipping `workspace:*` in the released package manifest.",
+  "migrations": [],
+  "notes": "Run `npm install -g trellis-hgl@beta` to refresh the published CLI package metadata. No file migration is required."
+}

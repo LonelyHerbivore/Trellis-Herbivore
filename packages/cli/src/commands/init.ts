@@ -314,6 +314,55 @@ function writeTaskSkeleton(
   }
 }
 
+function readCurrentDeveloperName(cwd: string): string | null {
+  const developerFile = path.join(cwd, DIR_NAMES.WORKFLOW, FILE_NAMES.DEVELOPER);
+  if (!fs.existsSync(developerFile)) {
+    return null;
+  }
+
+  const raw = fs.readFileSync(developerFile, "utf-8");
+  const nameMatch = raw.match(/^\s*name\s*=\s*(.+?)\s*$/m);
+  return nameMatch ? nameMatch[1] : null;
+}
+
+function ensureInitialTrellisSwitch(cwd: string, developerName: string): void {
+  const workspaceDir = path.join(
+    cwd,
+    DIR_NAMES.WORKFLOW,
+    DIR_NAMES.WORKSPACE,
+    developerName,
+  );
+  fs.mkdirSync(workspaceDir, { recursive: true });
+
+  const switchFile = path.join(workspaceDir, "trellis-switch.json");
+  if (fs.existsSync(switchFile)) {
+    return;
+  }
+
+  fs.writeFileSync(
+    switchFile,
+    JSON.stringify({ enabled: true }, null, 2) + "\n",
+    "utf-8",
+  );
+
+  const journals = fs
+    .readdirSync(workspaceDir)
+    .filter((f) => f.startsWith("journal-") && f.endsWith(".md"))
+    .sort((a, b) => {
+      const na = parseInt(a.match(/\d+/)?.[0] ?? "0");
+      const nb = parseInt(b.match(/\d+/)?.[0] ?? "0");
+      return nb - na;
+    });
+  const journalPath = path.join(workspaceDir, journals[0] ?? "journal-1.md");
+
+  if (!fs.existsSync(journalPath)) {
+    fs.writeFileSync(journalPath, "", "utf-8");
+  }
+
+  const prefix = fs.statSync(journalPath).size > 0 ? "\n" : "";
+  fs.appendFileSync(journalPath, `${prefix}- Trellis 已开启\n`, "utf-8");
+}
+
 /**
  * Compute the bootstrap checklist items (previously stored as structured
  * `subtasks: [{name, status}]` in task.json). Per task 04-21-task-schema-unify
@@ -838,6 +887,17 @@ async function handleReinit(
         chalk.gray(`📋 Tracking ${hashedCount} template files for updates`),
       );
     }
+
+    if (platformsToAdd.includes("claude")) {
+      const currentDeveloper = readCurrentDeveloperName(cwd);
+      if (currentDeveloper) {
+        try {
+          ensureInitialTrellisSwitch(cwd, currentDeveloper);
+        } catch {
+          // Silent failure
+        }
+      }
+    }
   }
 
   // --- Add developer ---
@@ -858,12 +918,14 @@ async function handleReinit(
       path.join(cwd, DIR_NAMES.WORKFLOW, FILE_NAMES.DEVELOPER),
     );
 
+    let developerInitialized = false;
     try {
       const scriptPath = path.join(cwd, PATHS.SCRIPTS, "init_developer.py");
       execSync(`${pythonCmd} "${scriptPath}" "${devName}"`, {
         cwd,
         stdio: "pipe",
       });
+      developerInitialized = true;
       console.log(chalk.green(`✓ Developer "${devName}" initialized`));
     } catch {
       console.log(
@@ -874,6 +936,14 @@ async function handleReinit(
           `  ${pythonCmd} .trellis/scripts/init_developer.py ${devName}`,
         ),
       );
+    }
+
+    if (developerInitialized && getConfiguredPlatforms(cwd).has("claude-code")) {
+      try {
+        ensureInitialTrellisSwitch(cwd, devName);
+      } catch {
+        // Silent failure
+      }
     }
 
     // Create joiner onboarding task for fresh checkouts (no prior .developer).
@@ -1816,14 +1886,24 @@ export async function init(options: InitOptions): Promise<void> {
 
   // Initialize developer identity (silent - no output)
   if (developerName) {
+    let developerInitialized = false;
     try {
       const scriptPath = path.join(cwd, PATHS.SCRIPTS, "init_developer.py");
       execSync(`${pythonCmd} "${scriptPath}" "${developerName}"`, {
         cwd,
         stdio: "pipe", // Silent
       });
+      developerInitialized = true;
     } catch {
       // Silent failure - user can run init_developer.py manually
+    }
+
+    if (developerInitialized && getConfiguredPlatforms(cwd).has("claude-code")) {
+      try {
+        ensureInitialTrellisSwitch(cwd, developerName);
+      } catch {
+        // Silent failure
+      }
     }
 
     // Three-branch dispatch using flags captured at init() start (before

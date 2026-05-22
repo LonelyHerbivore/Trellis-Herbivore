@@ -120,6 +120,29 @@ def _has_curated_jsonl_entry(jsonl_path: Path) -> bool:
     return False
 
 
+def _read_trellis_switch_enabled() -> bool:
+    """Return False if trellis-switch.json exists and has enabled=false."""
+    try:
+        cwd = Path.cwd()
+        while cwd != cwd.parent:
+            trellis_dir = cwd / ".trellis"
+            if trellis_dir.is_dir():
+                dev_file = trellis_dir / ".developer"
+                if dev_file.is_file():
+                    for line in dev_file.read_text(encoding="utf-8").splitlines():
+                        if line.startswith("name="):
+                            name = line.split("=", 1)[1].strip()
+                            switch = trellis_dir / "workspace" / name / "trellis-switch.json"
+                            if switch.is_file():
+                                import json as _json
+                                return _json.loads(switch.read_text(encoding="utf-8")).get("enabled", True)
+                return True
+            cwd = cwd.parent
+    except Exception:
+        pass
+    return True
+
+
 def should_skip_injection() -> bool:
     """Check if any platform's non-interactive flag is set, or if Trellis
     hooks are explicitly disabled via TRELLIS_HOOKS=0 / TRELLIS_DISABLE_HOOKS=1.
@@ -127,6 +150,8 @@ def should_skip_injection() -> bool:
     if os.environ.get("TRELLIS_HOOKS") == "0":
         return True
     if os.environ.get("TRELLIS_DISABLE_HOOKS") == "1":
+        return True
+    if _detect_platform({}) == "claude" and not _read_trellis_switch_enabled():
         return True
     non_interactive_vars = [
         "CLAUDE_NON_INTERACTIVE",

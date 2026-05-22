@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
@@ -12,7 +12,6 @@ const scriptPath = path.join(
 const cliPkgPath = path.join(repoRoot, "packages/cli/package.json");
 const corePkgPath = path.join(repoRoot, "packages/core/package.json");
 
-const originalPlatform = process.platform;
 
 function withTempRegistryScript<T>(
   body: string,
@@ -42,8 +41,8 @@ describe("release-preflight verify-published-cli-manifest", () => {
 
     const body =
       process.platform === "win32"
-        ? `@echo off\r\nif "%1"=="view" if "%2"=="${cliPkg.name}@${cliPkg.version}" if "%3"=="dependencies" (\r\n  echo {\"${corePkg.name}\":\"${cliPkg.version}\"}\r\n  exit /b 0\r\n)\r\necho unexpected args: %* 1>&2\r\nexit /b 1\r\n`
-        : `#!/bin/sh\nif [ "$1" = "view" ] && [ "$2" = "${cliPkg.name}@${cliPkg.version}" ] && [ "$3" = "dependencies" ]; then\n  printf '{\"${corePkg.name}\":\"${cliPkg.version}\"}'\n  exit 0\nfi\nprintf 'unexpected args: %s\\n' "$*" >&2\nexit 1\n`;
+        ? `@echo off\r\nif "%1"=="view" if "%2"=="${cliPkg.name}@${cliPkg.version}" if "%3"=="dependencies" (\r\n  echo {"${corePkg.name}":"${cliPkg.version}"}\r\n  exit /b 0\r\n)\r\necho unexpected args: %* 1>&2\r\nexit /b 1\r\n`
+        : `#!/bin/sh\nif [ "$1" = "view" ] && [ "$2" = "${cliPkg.name}@${cliPkg.version}" ] && [ "$3" = "dependencies" ]; then\n  printf '{"${corePkg.name}":"${cliPkg.version}"}'\n  exit 0\nfi\nprintf 'unexpected args: %s\\n' "$*" >&2\nexit 1\n`;
 
     withTempRegistryScript(body, (mockPath) => {
       const out = execFileSync(
@@ -73,8 +72,8 @@ describe("release-preflight verify-published-cli-manifest", () => {
 
     const body =
       process.platform === "win32"
-        ? `@echo off\r\nif "%1"=="view" if "%2"=="${cliPkg.name}@${cliPkg.version}" if "%3"=="dependencies" (\r\n  echo {\"${corePkg.name}\":\"workspace:*\"}\r\n  exit /b 0\r\n)\r\necho unexpected args: %* 1>&2\r\nexit /b 1\r\n`
-        : `#!/bin/sh\nif [ "$1" = "view" ] && [ "$2" = "${cliPkg.name}@${cliPkg.version}" ] && [ "$3" = "dependencies" ]; then\n  printf '{\"${corePkg.name}\":\"workspace:*\"}'\n  exit 0\nfi\nprintf 'unexpected args: %s\\n' "$*" >&2\nexit 1\n`;
+        ? `@echo off\r\nif "%1"=="view" if "%2"=="${cliPkg.name}@${cliPkg.version}" if "%3"=="dependencies" (\r\n  echo {"${corePkg.name}":"workspace:*"}\r\n  exit /b 0\r\n)\r\necho unexpected args: %* 1>&2\r\nexit /b 1\r\n`
+        : `#!/bin/sh\nif [ "$1" = "view" ] && [ "$2" = "${cliPkg.name}@${cliPkg.version}" ] && [ "$3" = "dependencies" ]; then\n  printf '{"${corePkg.name}":"workspace:*"}'\n  exit 0\nfi\nprintf 'unexpected args: %s\\n' "$*" >&2\nexit 1\n`;
 
     withTempRegistryScript(body, (mockPath) => {
       expect(() =>

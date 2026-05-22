@@ -219,6 +219,22 @@ describe("update() integration", () => {
     expect(entries.filter((e) => e.startsWith(".backup-")).length).toBe(0);
   });
 
+  it("#1b update silently creates trellis-switch.json for existing developers", async () => {
+    await setupProject();
+
+    const developerDir = path.join(tmpDir, ".trellis", "workspace", "testuser");
+    fs.mkdirSync(developerDir, { recursive: true });
+    const switchPath = path.join(developerDir, "trellis-switch.json");
+    if (fs.existsSync(switchPath)) fs.unlinkSync(switchPath);
+
+    await update({});
+
+    expect(fs.existsSync(switchPath)).toBe(true);
+    expect(JSON.parse(fs.readFileSync(switchPath, "utf-8"))).toEqual({
+      enabled: true,
+    });
+  });
+
   it("#2 dry run makes no file changes even when changes exist", async () => {
     await setupProject();
 

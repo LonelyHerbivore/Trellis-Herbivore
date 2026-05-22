@@ -9,7 +9,7 @@
  * bucket of migrations.
  *
  * This guard runs before `pnpm version` bumps on every release track:
- *   1. Query npm for all published versions of @mindfoldhq/trellis
+ *   1. Query npm for all published versions of trellis-hgl
  *   2. Diff against local `src/migrations/manifests/*.json`
  *   3. Fail non-zero if any npm version lacks a local manifest
  *
@@ -31,7 +31,7 @@ import { fileURLToPath } from "node:url";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const MANIFESTS_DIR = path.join(__dirname, "../src/migrations/manifests");
-const PACKAGE_NAME = "@mindfoldhq/trellis";
+const PACKAGE_NAME = "trellis-hgl";
 
 /**
  * Historical npm versions whose manifests are permanently missing from the
@@ -66,23 +66,39 @@ function readLocalManifestVersions() {
 }
 
 function fetchNpmVersions() {
-  try {
-    const output = execSync(`npm view ${PACKAGE_NAME} versions --json`, {
-      encoding: "utf-8",
-      stdio: ["pipe", "pipe", "pipe"],
-      timeout: 15_000,
-    });
-    const parsed = JSON.parse(output);
-    // `npm view` returns a string for single version and array otherwise.
-    return Array.isArray(parsed) ? parsed : [parsed];
-  } catch (err) {
-    // First publish ever? Package doesn't exist on npm yet — nothing to sync.
-    const stderr = err.stderr?.toString() ?? "";
-    if (stderr.includes("E404") || stderr.includes("not found")) {
-      return [];
+  const command = `npm view ${PACKAGE_NAME} versions --json --registry=https://registry.npmjs.org/`;
+  const attempts = 3;
+  let lastError;
+
+  for (let i = 1; i <= attempts; i += 1) {
+    try {
+      const output = execSync(command, {
+        encoding: "utf-8",
+        stdio: ["pipe", "pipe", "pipe"],
+        timeout: 120_000,
+      });
+      const parsed = JSON.parse(output);
+      // `npm view` returns a string for single version and array otherwise.
+      return Array.isArray(parsed) ? parsed : [parsed];
+    } catch (err) {
+      lastError = err;
+      // First publish ever? Package doesn't exist on npm yet — nothing to sync.
+      const stderr = err.stderr?.toString() ?? "";
+      if (stderr.includes("E404") || stderr.includes("not found")) {
+        return [];
+      }
+      const code = err.code ?? err.errno;
+      const transient =
+        code === "ETIMEDOUT" ||
+        code === -4039 ||
+        stderr.includes("ETIMEDOUT") ||
+        stderr.includes("EAI_AGAIN") ||
+        stderr.includes("ECONNRESET");
+      if (!transient || i === attempts) throw err;
     }
-    throw err;
   }
+
+  throw lastError;
 }
 
 function main() {

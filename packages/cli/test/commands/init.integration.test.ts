@@ -150,6 +150,17 @@ describe("init() integration", () => {
         path.join(tmpDir, ".claude", "skills", "trellis-meta", "SKILL.md"),
       ),
     ).toBe(true);
+    expect(
+      fs.existsSync(
+        path.join(
+          tmpDir,
+          ".claude",
+          "commands",
+          "trellis",
+          "trellis-switch.md",
+        ),
+      ),
+    ).toBe(true);
   });
 
   it("#3 multi platform creates all selected platform directories", async () => {
@@ -661,6 +672,27 @@ describe("init() integration", () => {
   it("#7 passes developer name to init_developer script", async () => {
     await init({ yes: true, user: "testdev" });
 
+    const switchPath = path.join(
+      tmpDir,
+      ".trellis",
+      "workspace",
+      "testdev",
+      "trellis-switch.json",
+    );
+    expect(fs.existsSync(switchPath)).toBe(true);
+    expect(JSON.parse(fs.readFileSync(switchPath, "utf-8"))).toEqual({
+      enabled: true,
+    });
+
+    const journalPath = path.join(
+      tmpDir,
+      ".trellis",
+      "workspace",
+      "testdev",
+      "journal-1.md",
+    );
+    expect(fs.readFileSync(journalPath, "utf-8")).toContain("Trellis 已开启");
+
     const calls = vi.mocked(execSync).mock.calls;
     const match = calls.find(
       ([cmd]) => typeof cmd === "string" && cmd.includes("init_developer.py"),
@@ -671,6 +703,68 @@ describe("init() integration", () => {
       process.platform === "win32" ? "python" : "python3";
     expect(command).toContain(`${expectedPythonCmd} "`);
     expect(command).toContain('"testdev"');
+  });
+
+  it("#7a does not create trellis-switch.json when init_developer fails", async () => {
+    vi.mocked(execSync).mockImplementation(((cmd: string) => {
+      const expectedPythonCmd =
+        process.platform === "win32" ? "python" : "python3";
+      if (cmd === `${expectedPythonCmd} --version`) {
+        return "Python 3.11.12";
+      }
+      if (cmd.includes("init_developer.py")) {
+        throw new Error("init_developer failed");
+      }
+      return "";
+    }) as typeof execSync);
+
+    await init({ yes: true, user: "testdev" });
+
+    expect(
+      fs.existsSync(
+        path.join(
+          tmpDir,
+          ".trellis",
+          "workspace",
+          "testdev",
+          "trellis-switch.json",
+        ),
+      ),
+    ).toBe(false);
+  });
+
+  it("#7aa adding Claude to an existing project creates trellis-switch.json for the current developer", async () => {
+    await init({ yes: true, cursor: true, user: "testdev" });
+
+    const developerFile = path.join(
+      tmpDir,
+      DIR_NAMES.WORKFLOW,
+      FILE_NAMES.DEVELOPER,
+    );
+    fs.writeFileSync(
+      developerFile,
+      "name=testdev\ninitialized_at=2026-05-22T00:00:00\n",
+      "utf-8",
+    );
+
+    const switchPath = path.join(
+      tmpDir,
+      ".trellis",
+      "workspace",
+      "testdev",
+      "trellis-switch.json",
+    );
+    if (fs.existsSync(switchPath)) {
+      fs.unlinkSync(switchPath);
+    }
+
+    await init({ yes: true, claude: true });
+
+    expect(fs.existsSync(path.join(tmpDir, ".claude"))).toBe(true);
+    expect(fs.existsSync(switchPath)).toBe(true);
+    expect(JSON.parse(fs.readFileSync(switchPath, "utf-8"))).toEqual({
+      enabled: true,
+    });
   });
 
   it("#7b throws when the selected Python command is below 3.9", async () => {

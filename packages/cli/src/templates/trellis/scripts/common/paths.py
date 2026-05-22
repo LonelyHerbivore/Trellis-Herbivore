@@ -34,6 +34,7 @@ FILE_DEVELOPER = ".developer"
 FILE_CURRENT_TASK = ".current-task"
 FILE_TASK_JSON = "task.json"
 FILE_JOURNAL_PREFIX = "journal-"
+FILE_TRELLIS_SWITCH = "trellis-switch.json"
 
 
 # =============================================================================
@@ -149,6 +150,34 @@ def get_workspace_dir(repo_root: Path | None = None) -> Path | None:
 # =============================================================================
 # Journal File
 # =============================================================================
+
+def get_switch_file(repo_root: Path | None = None) -> Path | None:
+    """Get trellis-switch.json path for the current developer."""
+    ws = get_workspace_dir(repo_root)
+    return (ws / FILE_TRELLIS_SWITCH) if ws else None
+
+
+def read_switch_enabled(repo_root: Path | None = None) -> bool:
+    """Return True if Trellis injection is enabled (default: True)."""
+    import json as _json
+    f = get_switch_file(repo_root)
+    if f is None or not f.is_file():
+        return True
+    try:
+        return _json.loads(f.read_text(encoding="utf-8")).get("enabled", True)
+    except Exception:
+        return True
+
+
+def write_switch_enabled(enabled: bool, repo_root: Path | None = None) -> None:
+    """Write trellis-switch.json. Raises RuntimeError if developer not initialized."""
+    import json as _json
+    f = get_switch_file(repo_root)
+    if f is None:
+        raise RuntimeError("Developer not initialized")
+    f.parent.mkdir(parents=True, exist_ok=True)
+    f.write_text(_json.dumps({"enabled": enabled}, indent=2) + "\n", encoding="utf-8")
+
 
 def get_active_journal_file(repo_root: Path | None = None) -> Path | None:
     """Get the current active journal file.

@@ -300,6 +300,27 @@ def build_breadcrumb(
 # Entry
 # ---------------------------------------------------------------------------
 
+def _read_trellis_switch_enabled() -> bool:
+    try:
+        cwd = Path.cwd()
+        while cwd != cwd.parent:
+            trellis_dir = cwd / ".trellis"
+            if trellis_dir.is_dir():
+                dev_file = trellis_dir / ".developer"
+                if dev_file.is_file():
+                    for line in dev_file.read_text(encoding="utf-8").splitlines():
+                        if line.startswith("name="):
+                            name = line.split("=", 1)[1].strip()
+                            switch = trellis_dir / "workspace" / name / "trellis-switch.json"
+                            if switch.is_file():
+                                return json.loads(switch.read_text(encoding="utf-8")).get("enabled", True)
+                return True
+            cwd = cwd.parent
+    except Exception:
+        pass
+    return True
+
+
 def main() -> int:
     if os.environ.get("TRELLIS_HOOKS") == "0" or os.environ.get("TRELLIS_DISABLE_HOOKS") == "1":
         return 0
@@ -309,6 +330,10 @@ def main() -> int:
     except (json.JSONDecodeError, ValueError):
         data = {}
 
+    platform = _detect_platform(data)
+    if platform == "claude" and not _read_trellis_switch_enabled():
+        return 0
+
     cwd_str = data.get("cwd") or os.getcwd()
     cwd = Path(cwd_str)
 
@@ -317,8 +342,8 @@ def main() -> int:
         return 0  # not a Trellis project
 
     templates = load_breadcrumbs(root)
-    platform = _detect_platform(data)
     config = _read_trellis_config(root)
+    platform = _detect_platform(data)
     task = get_active_task(root, data)
     if task is None:
         # No active task — still emit a breadcrumb nudging AI toward

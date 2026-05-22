@@ -666,7 +666,7 @@ gitDescribe("git-backed registry backend", () => {
             path.join(cwd, ".trellis", "spec", "rules.md"),
             "utf-8",
           ),
-        ).toBe(["remote rules", ""].join(require("node:os").EOL));
+        ).toBe(["remote rules", ""].join(os.EOL));
       },
     );
   });
@@ -720,7 +720,7 @@ gitDescribe("git-backed registry backend", () => {
             path.join(cwd, ".trellis", "spec", "rules.md"),
             "utf-8",
           ),
-        ).toBe(["remote rules", ""].join(require("node:os").EOL));
+        ).toBe(["remote rules", ""].join(os.EOL));
       },
     );
   });
@@ -752,7 +752,7 @@ gitDescribe("git-backed registry backend", () => {
           "local keep\n",
         );
         expect(fs.readFileSync(path.join(specDir, "new.md"), "utf-8")).toBe(
-          ["remote new", ""].join(require("node:os").EOL),
+          ["remote new", ""].join(os.EOL),
         );
       },
     );

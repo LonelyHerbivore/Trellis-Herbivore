@@ -54,6 +54,7 @@ import {
 // Platform-specific template content (hooks, agents, settings — NOT commands/skills)
 import {
   getAllAgents as getClaudeAgents,
+  getAllCommands as getClaudeCommands,
   getSettingsTemplate as getClaudeSettings,
 } from "../templates/claude/index.js";
 import {
@@ -164,6 +165,12 @@ const PLATFORM_FUNCTIONS: Record<AITool, PlatformFunctions> = {
         (n) => `.claude/commands/trellis/${n}.md`,
         ".claude/skills",
       );
+      for (const cmd of getClaudeCommands()) {
+        files.set(
+          `.claude/commands/trellis/${cmd.name}.md`,
+          replacePythonCommandLiterals(resolvePlaceholders(cmd.content, ctx)),
+        );
+      }
       for (const agent of getClaudeAgents()) {
         files.set(`.claude/agents/${agent.name}.md`, agent.content);
       }

@@ -1033,6 +1033,29 @@ function updateVersionFile(cwd: string): void {
   fs.writeFileSync(versionPath, VERSION);
 }
 
+function ensureTrellisSwitchForAllDevelopers(cwd: string): void {
+  const workspaceDir = path.join(cwd, DIR_NAMES.WORKFLOW, DIR_NAMES.WORKSPACE);
+  if (!fs.existsSync(workspaceDir)) {
+    return;
+  }
+
+  for (const devName of fs.readdirSync(workspaceDir)) {
+    const devDir = path.join(workspaceDir, devName);
+    if (!fs.statSync(devDir).isDirectory()) continue;
+
+    const switchFile = path.join(devDir, "trellis-switch.json");
+    if (fs.existsSync(switchFile)) {
+      continue;
+    }
+
+    fs.writeFileSync(
+      switchFile,
+      JSON.stringify({ enabled: true }, null, 2) + "\n",
+      "utf-8",
+    );
+  }
+}
+
 /**
  * Get current installed version
  */
@@ -2001,6 +2024,14 @@ export async function update(options: UpdateOptions): Promise<void> {
     classifiedMigrations &&
     (classifiedMigrations.auto.length > 0 ||
       classifiedMigrations.confirm.length > 0);
+
+  if (!options.dryRun && getConfiguredPlatforms(cwd).has("claude-code")) {
+    try {
+      ensureTrellisSwitchForAllDevelopers(cwd);
+    } catch {
+      // Silent failure
+    }
+  }
 
   if (
     changes.newFiles.length === 0 &&

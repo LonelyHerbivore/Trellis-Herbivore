@@ -99,7 +99,7 @@ describe("regression: workflow archive without commit", () => {
 describe("regression: package rename to trellis-hgl", () => {
   it("[rename] CLI package template metadata points to trellis-hgl package name", () => {
     const packageJsonPath = path.resolve(
-      fileURLToPath(new URL("../../package.json", import.meta.url)),
+      fileURLToPath(new URL("../package.json", import.meta.url)),
     );
     const packageJson = JSON.parse(
       fs.readFileSync(packageJsonPath, "utf-8"),
@@ -390,9 +390,13 @@ ${separator}
     }
   }
 
+  function pythonCommand(): string {
+    return process.platform === "win32" ? "python" : "python3";
+  }
+
   function runAddSession(title: string, options?: { branch?: string }): void {
     const command = [
-      "python3",
+      pythonCommand(),
       JSON.stringify(
         path.join(tmpDir, ".trellis", "scripts", "add_session.py"),
       ),
@@ -3126,14 +3130,14 @@ print(len(entries))
     return readFileSync(templatePath, "utf-8");
   }
 
-  it("[workflow-state-r1] template workflow.md [workflow-state:in_progress] mentions commit (Phase 3.4)", () => {
+  it("[workflow-state-r1] template workflow.md [workflow-state:in_progress] allows archive without requiring commit", () => {
     const wf = templateWorkflowMd();
     const match = wf.match(
       /\[workflow-state:in_progress\]([\s\S]*?)\[\/workflow-state:in_progress\]/,
     );
     expect(match).toBeTruthy();
     const body = match?.[1] ?? "";
-    expect(body).toMatch(/commit \(Phase 3\.4\)/i);
+    expect(body).toMatch(/archive or commit as needed/i);
   });
 
   it("Claude review/implement agent templates use trellis-native TDD references", () => {
@@ -3316,11 +3320,19 @@ print(len(entries))
       "result = {'M': mod._strip_breadcrumb_tag_blocks(matched), 'X': mod._strip_breadcrumb_tag_blocks(mismatched), 'N': mod._strip_breadcrumb_tag_blocks(nested_orphan)}",
       "print(json.dumps(result))",
     ].join("; ");
-    const output = execSync(`${pythonCmd} -c ${JSON.stringify(probe)}`, {
+    const pyCmd = process.platform === "win32" ? "python" : "python3";
+    const output = spawnSync(pyCmd, ["-c", probe], {
       cwd: tmpDir,
       encoding: "utf-8",
     });
-    const lastLine = output
+    if (
+      output.error &&
+      ((output.error as NodeJS.ErrnoException).code === "ENOENT" ||
+        output.status === 9009)
+    ) {
+      return;
+    }
+    const lastLine = (output.stdout ?? "")
       .split("\n")
       .filter((l) => l.startsWith("{"))
       .pop();
@@ -4859,6 +4871,7 @@ describe("regression: parse_simple_yaml Python execution (0.3.8)", () => {
 
   /** Run parse_simple_yaml via Python subprocess and return parsed result */
   function runPythonYaml(yamlContent: string): unknown {
+    const pyCmd = process.platform === "win32" ? "python" : "python3";
     const scriptFile = path.join(tmpDir, "_test.py");
     const script = [
       "import sys, json",
@@ -4868,7 +4881,7 @@ describe("regression: parse_simple_yaml Python execution (0.3.8)", () => {
       "print(json.dumps(result))",
     ].join("\n");
     fs.writeFileSync(scriptFile, script);
-    const out = execSync(`python3 ${JSON.stringify(scriptFile)}`, {
+    const out = execSync(`${pyCmd} ${JSON.stringify(scriptFile)}`, {
       encoding: "utf-8",
     });
     return JSON.parse(out.trim());
@@ -5063,7 +5076,7 @@ describe("regression: copilot agents use YAML tools frontmatter", () => {
       path.join(tmpDir, ".github/agents/trellis-implement.agent.md"),
       "utf-8",
     );
-    const frontmatter = content.split("---\n")[1] ?? "";
+    const frontmatter = content.split(/---\r?\n/)[1] ?? "";
 
     expect(frontmatter).toContain(
       "tools:\n  - read\n  - edit\n  - execute\n  - search\n  - web\n  - exa/*",
@@ -5078,7 +5091,7 @@ describe("regression: copilot agents use YAML tools frontmatter", () => {
       path.join(tmpDir, ".github/agents/trellis-research.agent.md"),
       "utf-8",
     );
-    const frontmatter = content.split("---\n")[1] ?? "";
+    const frontmatter = content.split(/---\r?\n/)[1] ?? "";
 
     expect(frontmatter).toContain("tools:\n  - read");
     expect(frontmatter).toContain("  - edit");
@@ -5176,7 +5189,7 @@ describe("regression: research agent persists findings to task dir", () => {
     it(`[${rel}] has Write tool and persist instruction`, () => {
       const content = fs.readFileSync(path.join(repoRoot, rel), "utf-8");
       // Frontmatter tool list must include Write (capitalized form)
-      const fm = content.split("---\n")[1] ?? "";
+      const fm = content.split(/---\r?\n/)[1] ?? "";
       expect(fm).toMatch(/tools:\s*[^\n]*\bWrite\b/);
       // Body must reference persist target
       expect(content).toContain("{TASK_DIR}/research/");
@@ -5194,7 +5207,7 @@ describe("regression: research agent persists findings to task dir", () => {
   it("[packages/cli/src/templates/gemini/agents/trellis-research.md] omits tools line + has persist instruction", () => {
     const rel = "packages/cli/src/templates/gemini/agents/trellis-research.md";
     const content = fs.readFileSync(path.join(repoRoot, rel), "utf-8");
-    const fm = content.split("---\n")[1] ?? "";
+    const fm = content.split(/---\r?\n/)[1] ?? "";
     expect(fm).not.toMatch(/^tools:/m);
     expect(content).toContain("{TASK_DIR}/research/");
     expect(content).toMatch(/PERSIST|[Pp]ersist/);
@@ -5239,7 +5252,7 @@ describe("regression: research agent persists findings to task dir", () => {
       ),
       "utf-8",
     );
-    const fm = content.split("---\n")[1] ?? "";
+    const fm = content.split(/---\r?\n/)[1] ?? "";
     // OpenCode uses YAML permission block, not Claude-style `tools:` list
     expect(fm).toMatch(/^\s*write:\s*allow\s*$/m);
     expect(fm).toMatch(/^\s*edit:\s*allow\s*$/m);
@@ -5342,7 +5355,7 @@ describe("regression: Gemini CLI 0.40.x template compatibility (#224)", () => {
         path.join(geminiAgentsDir, entry),
         "utf-8",
       );
-      const fm = content.split("---\n")[1] ?? "";
+      const fm = content.split(/---\r?\n/)[1] ?? "";
       expect(
         fm,
         `gemini/agents/${entry} must NOT include a tools: line — Gemini CLI 0.40+ rejects the comma-separated form`,
@@ -5524,13 +5537,14 @@ describe("regression: session-start.py f-string Python <=3.11 compat (0.5.2)", (
       ).toBeNull();
     });
 
-    it(`${rel} parses cleanly with python3 -m py_compile`, () => {
+    it(`${rel} parses cleanly with host Python ast.parse`, () => {
       // Belt-and-braces: ask the host Python to parse the file. On Python
       // 3.12+ this won't catch the regression (PEP 701 allows it), so the
       // regex test above is the primary gate. On macOS system Python 3.9 or
       // any CI runner with python3 < 3.12 this is a hard catch.
+      const pyCmd = process.platform === "win32" ? "python" : "python3";
       const r = spawnSync(
-        "python3",
+        pyCmd,
         [
           "-c",
           `import ast,sys; ast.parse(open(sys.argv[1], encoding='utf-8').read()); print('OK')`,
@@ -5538,12 +5552,15 @@ describe("regression: session-start.py f-string Python <=3.11 compat (0.5.2)", (
         ],
         { encoding: "utf-8" },
       );
-      // If python3 is unavailable on the runner, skip silently — the regex
+      // If Python is unavailable on the runner, skip silently — the regex
       // assertion above already covers the regression deterministically.
-      if (r.error && (r.error as NodeJS.ErrnoException).code === "ENOENT") return;
+      if (
+        r.error &&
+        ((r.error as NodeJS.ErrnoException).code === "ENOENT" || r.status === 9009)
+      ) return;
       expect(
         r.status,
-        `python3 ast.parse failed for ${rel}:\n${r.stderr ?? ""}`,
+        `${pyCmd} ast.parse failed for ${rel}:\n${r.stderr ?? ""}`,
       ).toBe(0);
       expect(r.stdout ?? "").toContain("OK");
     });

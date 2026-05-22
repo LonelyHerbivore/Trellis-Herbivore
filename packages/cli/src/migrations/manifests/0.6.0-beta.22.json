@@ -1,0 +1,9 @@
+{
+  "version": "0.6.0-beta.22",
+  "description": "Beta patch: add the Claude-only trellis-switch toggle so developers can disable or re-enable Trellis injection without removing the Claude integration.",
+  "breaking": false,
+  "recommendMigrate": false,
+  "changelog": "**Enhancements:**\n- feat(claude): add the `/trellis-switch` command so the current developer can toggle Trellis injection on or off from Claude Code.\n- feat(init): Claude initialization now creates a default-enabled `.trellis/workspace/<developer>/trellis-switch.json` and records the enabled state in the developer journal.\n- feat(update): `trellis update` now backfills missing `trellis-switch.json` files and related Claude toggle support for existing developer workspaces.\n- feat(hooks): Claude SessionStart, workflow-state, and subagent-context injection now honor the current developer's `trellis-switch.json` state while preserving a recovery path to re-enable Trellis.",
+  "migrations": [],
+  "notes": "Run `npm install -g trellis-hgl@beta` and `trellis update` to refresh Claude command templates, hooks, and per-developer trellis-switch state. No manual file migration is required."
+}

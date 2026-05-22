@@ -40,6 +40,11 @@ export interface SettingsTemplate {
   content: string;
 }
 
+export interface CommandTemplate {
+  name: string;
+  content: string;
+}
+
 export function getAllAgents(): AgentTemplate[] {
   const agents: AgentTemplate[] = [];
   const files = listFiles("agents");
@@ -53,6 +58,21 @@ export function getAllAgents(): AgentTemplate[] {
   }
 
   return agents;
+}
+
+export function getAllCommands(): CommandTemplate[] {
+  const commands: CommandTemplate[] = [];
+  const files = listFiles("commands");
+
+  for (const file of files) {
+    if (file.endsWith(".md")) {
+      const name = file.replace(".md", "");
+      const content = readTemplate(`commands/${file}`);
+      commands.push({ name, content });
+    }
+  }
+
+  return commands;
 }
 
 export function getSettingsTemplate(): SettingsTemplate {

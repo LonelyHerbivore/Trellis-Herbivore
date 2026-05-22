@@ -1,0 +1,9 @@
+{
+  "version": "0.6.0-beta.20",
+  "description": "Beta patch: add architecture-guidance and deep-review workflow gates, and pin key Trellis review agents to Opus.",
+  "breaking": false,
+  "recommendMigrate": false,
+  "changelog": "**Enhancements:**\n- feat(workflow): Claude Code planning can ask whether architecture guidance is needed before implementation; when enabled, `trellis-improve-codebase-architecture` runs in guidance mode before `task.py start` and its output is appended to `design.md`.\n- feat(workflow): if `implement.md` records `架构审查：enabled`, the review-gate order now extends beyond `trellis-code-architecture-review` into a required `trellis-improve-codebase-architecture` deep-review pass before the loop can finish.\n- feat(skills): `trellis-improve-codebase-architecture` now defines dedicated guidance and deep-review modes for pre-dev architecture shaping and post-review structural audits.\n\n**Bug Fixes:**\n- fix(agents): `trellis-check` and `trellis-research` now pin `model: opus` in their frontmatter so the generated Claude Code agents keep the intended review and research model tier.",
+  "migrations": [],
+  "notes": "Run `npm install -g trellis-hgl@beta` and `trellis update` to refresh workflow, skill, and agent templates. No file migration is required."
+}

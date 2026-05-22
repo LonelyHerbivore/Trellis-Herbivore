@@ -125,6 +125,17 @@ describe("shared-hooks capability table", () => {
     }
   });
 
+  it("shared hooks honor trellis-switch.json gating", () => {
+    const hooks = new Map(getSharedHookScripts().map((h) => [h.name, h.content]));
+    expect(hooks.get("session-start.py")).toContain("_read_trellis_switch_enabled");
+    expect(hooks.get("session-start.py")).toContain("trellis-switch.json");
+    expect(hooks.get("session-start.py")).toContain('_detect_platform({}) == "claude"');
+    expect(hooks.get("inject-workflow-state.py")).toContain("_read_trellis_switch_enabled");
+    expect(hooks.get("inject-workflow-state.py")).toContain("trellis-switch.json");
+    expect(hooks.get("inject-subagent-context.py")).toContain("_read_trellis_switch_enabled");
+    expect(hooks.get("inject-subagent-context.py")).toContain("trellis-switch.json");
+  });
+
   it("shared session-start.py injects compact task artifact guidance", () => {
     const sessionStart = getSharedHookScripts().find(
       (h) => h.name === "session-start.py",

@@ -684,6 +684,27 @@ def _parse_hook_input(input_data: dict) -> tuple[str, str, dict]:
     return "", "", tool_input
 
 
+def _read_trellis_switch_enabled() -> bool:
+    try:
+        cwd = Path.cwd()
+        while cwd != cwd.parent:
+            trellis_dir = cwd / ".trellis"
+            if trellis_dir.is_dir():
+                dev_file = trellis_dir / ".developer"
+                if dev_file.is_file():
+                    for line in dev_file.read_text(encoding="utf-8").splitlines():
+                        if line.startswith("name="):
+                            name = line.split("=", 1)[1].strip()
+                            switch = trellis_dir / "workspace" / name / "trellis-switch.json"
+                            if switch.is_file():
+                                return json.loads(switch.read_text(encoding="utf-8")).get("enabled", True)
+                return True
+            cwd = cwd.parent
+    except Exception:
+        pass
+    return True
+
+
 def main():
     if os.environ.get("TRELLIS_HOOKS") == "0" or os.environ.get("TRELLIS_DISABLE_HOOKS") == "1":
         sys.exit(0)
@@ -691,6 +712,9 @@ def main():
     try:
         input_data = json.load(sys.stdin)
     except json.JSONDecodeError:
+        sys.exit(0)
+
+    if _detect_platform(input_data) == "claude" and not _read_trellis_switch_enabled():
         sys.exit(0)
 
     subagent_type, original_prompt, tool_input = _parse_hook_input(input_data)
