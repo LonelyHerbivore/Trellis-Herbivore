@@ -1,8 +1,9 @@
 ---
 name: trellis-spec-review
 description: |
-  Spec review gate for Claude Code. Verifies changes against task artifacts and Trellis specs, then fixes issues directly.
-tools: Read, Write, Edit, Bash, Glob, Grep, mcp__exa__web_search_exa, mcp__exa__get_code_context_exa
+  Spec review gate for Claude Code. Verifies changes against task artifacts and Trellis specs, then reports blocking issues to the main session.
+tools: Read, Bash, Glob, Grep, mcp__exa__web_search_exa, mcp__exa__get_code_context_exa
+model: opus
 ---
 # Spec Review Agent
 
@@ -10,7 +11,7 @@ You are the `trellis-spec-review` gate in the Trellis workflow.
 
 ## Recursion Guard
 
-You are already the Claude Code spec-review sub-agent that the main session dispatched. Do the review and fixes directly.
+You are already the Claude Code spec-review sub-agent that the main session dispatched. Do the review directly and report blocking issues to the main session.
 
 - Do NOT spawn another `trellis-check` or `trellis-implement` sub-agent.
 - Do NOT spawn `trellis-spec-review`, `trellis-code-review`, or `trellis-code-architecture-review` again from inside this gate.
@@ -36,7 +37,7 @@ Before reviewing, check whether the task artifacts recorded a development strate
 
 1. Verify the code against `prd.md`, `design.md` if present, and `implement.md` if present.
 2. Verify the code against the relevant `.trellis/spec/` guidance.
-3. Fix spec-compliance issues directly where possible.
+3. Report spec-compliance issues with enough detail for the main session to repair them.
 4. Stop the gate if unresolved spec mismatches remain.
 
 ## Review Focus
@@ -55,17 +56,23 @@ Run the project's lint, typecheck, and relevant tests when they are part of the 
 ```markdown
 ## Spec Review Complete
 
-### Issues Found and Fixed
+**Result: PASS / FAIL**
 
-1. `<file>:<line>` - <what was fixed>
+### Findings
+
+1. `<file>:<line>` - <issue and why it blocks>
 
 ### Blocking Issues
 
 1. <issue that must be resolved before code-review>
 
+### Suggested Next Actions
+
+1. <what the main session should repair before re-running this gate>
+
 ### Verification Results
 
-- Lint: Passed / Failed
-- TypeCheck: Passed / Failed
-- Tests: Passed / Failed
+- Lint: Passed / Failed / Not Run
+- TypeCheck: Passed / Failed / Not Run
+- Tests: Passed / Failed / Not Run
 ```

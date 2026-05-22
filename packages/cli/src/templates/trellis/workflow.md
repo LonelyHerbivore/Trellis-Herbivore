@@ -225,6 +225,9 @@ Claude Code review-gate order: `trellis-spec-review` -> `trellis-code-review` ->
 Main-session default: dispatch implement/check sub-agents. Sub-agent self-exemption: if already running as `trellis-implement`, do NOT spawn another `trellis-implement` or `trellis-check`; if already running as `trellis-check`, do NOT spawn another `trellis-check` or `trellis-implement`. Dispatch is main session only.
 Dispatch prompt starts with `Active task: <task path from task.py current>`. Read context: jsonl entries -> `prd.md` -> `design.md if present` -> `implement.md if present`.
 
+Claude review gates are read-only gates. They report PASS / FAIL, blocking issues, and suggested next actions; they do not modify code directly.
+If a Claude review gate fails, the main agent repairs the code, then re-runs the same gate before advancing.
+For `trellis-spec-review`, `trellis-code-review`, `trellis-code-architecture-review`, and `trellis-merge-review`, count repeated failures per gate and per task. If the same gate blocks the same task more than 3 times in a row, the main agent must briefly report that status to the user, re-check whether the requirements have drifted, and ask whether to skip the current review gate.
 If the chosen strategy is `subagent + worktree`, all code-development subagents must use the same `./.claude/worktree` path.
 If the chosen strategy is TDD, align implementation and review expectations to `trellis-tdd`.
 If the task is architecture-sensitive or enters structural refactoring, route the architecture pass through `trellis-improve-codebase-architecture` before widening the change.
@@ -546,18 +549,19 @@ Codex 子代理定义会自动处理上下文加载。The Codex sub-agent defini
 2. `trellis-code-review`
 3. `trellis-code-architecture-review`
 
-Do not advance to the next gate until the previous gate passes. Each gate must review the code against `prd.md`, `design.md` if present, `implement.md` if present, and the relevant specs; fix issues directly before continuing.
+Do not advance to the next gate until the previous gate passes. Each gate must review the code against `prd.md`, `design.md` if present, `implement.md` if present, and the relevant specs; on FAIL, the main agent fixes the blocking issues and re-runs the same gate before continuing.
+If the same gate blocks the same task more than 3 times in a row, the main agent must briefly report that status to the user, re-check whether the requirements have drifted, and ask whether to skip the current review gate.
 
 如果当前平台还没有专用的 review-gate agent，则继续使用 `trellis-check` 作为兼容回退：
 
 - **Agent type**: `trellis-check`
-- **Task description**: Review all code changes against specs and task artifacts; fix any findings directly; ensure lint and type-check pass
-- **Dispatch prompt guard**: Tell the spawned agent it is already the `trellis-check` sub-agent and must review/fix directly, not spawn another `trellis-check` / `trellis-implement`.
+- **Task description**: Review all code changes against specs and task artifacts; report findings to the main session; ensure lint and type-check pass
+- **Dispatch prompt guard**: Tell the spawned agent it is already the `trellis-check` sub-agent and must review/report directly, not spawn another `trellis-check` / `trellis-implement`.
 
 check 子代理的职责：
 - 对照 spec 审查代码改动
 - 对照 `prd.md`、`design.md if present`、`implement.md if present` 审查代码改动
-- 自动修复发现的问题
+- 向主 agent 报告阻塞项和建议动作
 - 运行 lint 和 typecheck 验证
 
 [/Claude Code, Cursor, OpenCode, codex-sub-agent, Kiro, Gemini, Qoder, CodeBuddy, Copilot, Droid, Pi]
@@ -676,7 +680,8 @@ AI 会驱动一次按批次组织的提交，让 `/finish-work` 后续能在干�
    - 无合并冲突残留
    - 无遗漏文件
    - 合并目标分支状态与 `prd.md` 验收标准对齐
-   - 如果 `trellis-merge-review` 返回 FAIL，修复问题后重新执行此步骤。
+   - `trellis-merge-review` 只负责只读审查与阻塞报告，不直接修复合并结果。
+   - 如果 `trellis-merge-review` 返回 FAIL，由主 agent 修复问题后重新执行此步骤；若同一 gate 在同一任务中连续阻塞超过 3 次，由主 agent 升级给用户重新核对需求并询问是否跳过当前 review。
 
 3. **编译 + 测试**：`trellis-merge-review` 返回 PASS 后，在合并目标分支上执行项目的编译命令与完整测试套件。
    - 编译 + 测试全部通过，才允许进入 3.6。

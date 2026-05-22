@@ -235,6 +235,9 @@ describe("trellis template constants", () => {
     expect(step).toContain("trellis-code-review");
     expect(step).toContain("trellis-code-architecture-review");
     expect(step).toContain("Do not advance to the next gate until the previous gate passes");
+    expect(step).toContain("the main agent fixes the blocking issues and re-runs the same gate");
+    expect(step).toContain("more than 3 times in a row");
+    expect(step).toContain("ask whether to skip the current review gate");
   });
 
   it("gitignoreTemplate contains ignore patterns", () => {

@@ -94,6 +94,28 @@ describe("getAllAgents", () => {
       ]),
     );
   });
+
+  it("Claude review-gate agents are read-only Opus gates", () => {
+    const agents = new Map(
+      getAllAgents().map((agent) => [agent.name, agent.content]),
+    );
+    const reviewGateNames = [
+      "trellis-spec-review",
+      "trellis-code-review",
+      "trellis-code-architecture-review",
+      "trellis-merge-review",
+    ];
+
+    for (const name of reviewGateNames) {
+      const content = agents.get(name);
+      expect(content).toBeDefined();
+      expect(content).toContain("model: opus");
+      expect(content).toContain("tools: Read, Bash, Glob, Grep");
+      expect(content).not.toContain("Write");
+      expect(content).not.toContain("Edit");
+      expect(content).toContain("reports blocking issues to the main session");
+    }
+  });
 });
 
 // =============================================================================
