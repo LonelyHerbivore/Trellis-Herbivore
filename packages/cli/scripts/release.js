@@ -13,6 +13,7 @@ import { fileURLToPath } from "node:url";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const CLI_DIR = path.resolve(__dirname, "..");
+const REPO_ROOT = path.resolve(__dirname, "../../..");
 
 const RELEASE_TYPES = new Set([
   "patch",
@@ -71,7 +72,7 @@ function pushTarget(type) {
 function unstageIfPresent(target) {
   try {
     execSync(`git restore --staged -- "${target}"`, {
-      cwd: CLI_DIR,
+      cwd: REPO_ROOT,
       env: process.env,
       stdio: ["pipe", "pipe", "pipe"],
       encoding: "utf-8",
@@ -85,7 +86,7 @@ function unstageIfPresent(target) {
 }
 
 function stageReleaseChanges() {
-  run("git add -A .");
+  run("git add -A .", { cwd: REPO_ROOT });
   unstageIfPresent("docs-site");
   unstageIfPresent("marketplace");
 }

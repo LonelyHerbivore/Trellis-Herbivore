@@ -127,6 +127,9 @@ function main() {
   process.stdout.write(next + "\n");
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+if (
+  process.argv[1] &&
+  path.resolve(fileURLToPath(import.meta.url)) === path.resolve(process.argv[1])
+) {
   main();
 }
