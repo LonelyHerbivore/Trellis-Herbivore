@@ -10,8 +10,8 @@ Trellis publishes two npm packages from one git tag:
 
 | Package | Role | Published by |
 |---|---|---|
-| `@mindfoldhq/trellis` | User-facing CLI | GitHub Actions only |
-| `@mindfoldhq/trellis-core` | Programmatic core APIs used by the CLI and external integrations | GitHub Actions only |
+| `trellis-hgl` | User-facing CLI | GitHub Actions only |
+| `trellis-hgl-core` | Programmatic core APIs used by the CLI and external integrations | GitHub Actions only |
 
 The package pair is version-locked. Every published version must exist for both packages with the exact same version and npm dist-tag.
 
@@ -28,8 +28,8 @@ If a CI publish looks partial or inconsistent:
 1. Inspect the GitHub Actions publish run.
 2. Verify public npm visibility:
    ```bash
-   npm view @mindfoldhq/trellis@<version> version dist-tags --json --registry=https://registry.npmjs.org/
-   npm view @mindfoldhq/trellis-core@<version> version dist-tags --json --registry=https://registry.npmjs.org/
+   npm view trellis-hgl@<version> version dist-tags --json --registry=https://registry.npmjs.org/
+   npm view trellis-hgl-core@<version> version dist-tags --json --registry=https://registry.npmjs.org/
    ```
 3. Fix the workflow or release scripts.
 4. Re-run the CI path or move the tag after the fix when the same version is still the intended release artifact.
@@ -52,7 +52,7 @@ node packages/cli/scripts/release-preflight.js verify-npm --package all
 | Shared tag | Git tag `v<version>` must match both package versions. |
 | Shared npm dist-tag | `beta` for `-beta.N`, `rc` for `-rc.N`, `alpha` for `-alpha.N`, `latest` for GA. |
 | Source dependency | CLI source depends on core with `workspace:*`. |
-| Packed dependency | Published CLI package must depend on `@mindfoldhq/trellis-core` with the exact release version. |
+| Packed dependency | Published CLI package must depend on `trellis-hgl-core` with the exact release version. |
 
 `packages/cli/scripts/release-preflight.js` is the source of truth for these checks.
 
@@ -165,20 +165,25 @@ The release script does not publish locally. The pushed tag is what starts offic
 
 ## Publish workflow sequence
 
-`.github/workflows/publish.yml` runs on `v*` tag push and GitHub Release publication. It is idempotent for reruns on the same tag.
+`.github/workflows/publish.yml` runs on `v*` tag push and GitHub Release publication. The `v*` tag path is the primary release acceptance path; GitHub Release publication remains an additional trigger source. The workflow is idempotent for reruns on the same tag.
+
+The checkout step must use `actions/checkout@v4` with `fetch-depth: 0` and `submodules: recursive`, because the release test suite reads workflow files from the `marketplace` submodule.
 
 Required order:
 
-1. install dependencies
-2. `release-preflight check-versions --require-tag`
-3. `pnpm typecheck`
-4. `pnpm test`
-5. `pnpm build`
-6. `release-preflight verify-packed-cli`
-7. `release-preflight publish-plan --github`
-8. publish `@mindfoldhq/trellis-core` if missing
-9. publish `@mindfoldhq/trellis` if missing
-10. `release-preflight verify-npm --package all`
+1. checkout repository history and required submodules
+2. install dependencies
+3. `release-preflight check-versions --require-tag`
+4. `pnpm typecheck`
+5. `pnpm test`
+6. `pnpm build`
+7. `release-preflight verify-packed-cli`
+8. `release-preflight publish-plan --github`
+9. `release-preflight pack-publish-artifacts`
+10. publish `trellis-hgl-core` if missing
+11. publish `trellis-hgl` if missing
+12. `release-preflight verify-published-cli-manifest`
+13. `release-preflight verify-npm --package all`
 
 Core publishes first because the CLI package depends on the exact core version in the packed artifact.
 

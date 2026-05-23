@@ -240,12 +240,14 @@ function packWorkspacePackage(packageDir, destinationDir) {
 function packedCliCoreDependency() {
   const v = checkVersions({ requireTag: false, quiet: true });
   const tmp = fs.mkdtempSync(path.join(REPO_ROOT, ".pack-verify-"));
+  const extractDirName = "extract";
   let packed;
   try {
     packed = packWorkspacePackage(path.join(REPO_ROOT, "packages/cli"), tmp);
-    const extractDir = path.join(tmp, "extract");
+    const extractDir = path.join(tmp, extractDirName);
     fs.mkdirSync(extractDir);
-    execSync(`tar -xzf ${packed} -C ${extractDir} package/package.json`, {
+    execSync(`tar -xzf ${path.basename(packed)} -C ${extractDirName} package/package.json`, {
+      cwd: tmp,
       stdio: ["pipe", "pipe", "pipe"],
     });
     const packedPkg = readJSON(path.join(extractDir, "package/package.json"));
@@ -295,11 +297,21 @@ function packPublishArtifacts() {
   );
 }
 
-function verifyPublishedCliManifest() {
+async function verifyPublishedCliManifest() {
   const v = checkVersions({ requireTag: false });
-  const dependencies = npmViewJSON(`${v.cliName}@${v.cliVersion} dependencies`);
-  const dep = dependencies?.[v.coreName] ?? null;
-  if (!dep) {
+  let dep;
+  try {
+    dep = await retry(`published CLI metadata for ${v.cliName}@${v.cliVersion}`, () => {
+      const dependencies = npmViewJSON(`${v.cliName}@${v.cliVersion} dependencies`);
+      const dependency = dependencies?.[v.coreName] ?? null;
+      if (!dependency) {
+        throw new Error(
+          `published CLI metadata for ${v.cliName}@${v.cliVersion} is missing dependency on ${v.coreName}.`,
+        );
+      }
+      return dependency;
+    });
+  } catch {
     fail(
       `published CLI metadata for ${v.cliName}@${v.cliVersion} is missing dependency on ${v.coreName}.`,
     );
@@ -324,23 +336,27 @@ async function verifyNpm({ packageFilter }) {
   ].filter((pkg) => packageFilter === "all" || pkg.key === packageFilter);
 
   for (const pkg of packages) {
-    await retry(`${pkg.name}@${v.cliVersion}`, () => {
-      const version = npmViewJSON(`${pkg.name}@${v.cliVersion} version`);
-      if (version !== v.cliVersion) {
-        fail(
-          `${pkg.name}@${v.cliVersion} is not visible on the public npm registry.`,
-        );
-      }
-      const taggedVersion = npmViewJSON(`${pkg.name}@${tag} version`);
-      if (taggedVersion !== v.cliVersion) {
-        fail(
-          `${pkg.name}@${tag} resolves to ${taggedVersion ?? "nothing"}, expected ${v.cliVersion}.`,
-        );
-      }
-      console.log(
-        `${GREEN}ok${RESET} ${pkg.name}@${v.cliVersion} visible on npm tag "${tag}".`,
-      );
-    });
+    try {
+      await retry(`${pkg.name}@${v.cliVersion}`, () => {
+        const version = npmViewJSON(`${pkg.name}@${v.cliVersion} version`);
+        if (version !== v.cliVersion) {
+          throw new Error(
+            `${pkg.name}@${v.cliVersion} is not visible on the public npm registry.`,
+          );
+        }
+        const taggedVersion = npmViewJSON(`${pkg.name}@${tag} version`);
+        if (taggedVersion !== v.cliVersion) {
+          throw new Error(
+            `${pkg.name}@${tag} resolves to ${taggedVersion ?? "nothing"}, expected ${v.cliVersion}.`,
+          );
+        }
+      });
+    } catch (error) {
+      fail(error instanceof Error ? error.message : String(error));
+    }
+    console.log(
+      `${GREEN}ok${RESET} ${pkg.name}@${v.cliVersion} visible on npm tag "${tag}".`,
+    );
   }
 }
 
@@ -387,7 +403,7 @@ async function main() {
     return;
   }
   if (cmd === "verify-published-cli-manifest") {
-    verifyPublishedCliManifest();
+    await verifyPublishedCliManifest();
     return;
   }
   if (cmd === "verify-npm") {
