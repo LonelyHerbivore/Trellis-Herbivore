@@ -163,7 +163,7 @@ program
   .description("Upgrade the global Trellis CLI package")
   .option(
     "--tag <tag>",
-    "npm dist-tag or version to install (default follows current channel: latest, beta, or rc)",
+    "npm dist-tag or version to install (default: latest)",
   )
   .option("--dry-run", "Print the install command without running it")
   .action(async (options: Record<string, unknown>) => {

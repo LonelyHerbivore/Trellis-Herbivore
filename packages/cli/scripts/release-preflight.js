@@ -5,8 +5,7 @@
  * One source of truth for:
  *   1. Version match between the CLI package and core package (and the current git tag when checked from
  *      a tag context).
- *   2. The npm dist-tag derived from the shared version (`beta`, `rc`,
- *      `alpha`, or `latest`).
+ *   2. The npm dist-tag is always `latest`.
  *   3. An idempotent publish plan that checks npm for each package + version
  *      and reports whether a fresh publish is needed.
  *
@@ -78,10 +77,7 @@ function tagVersionFromEnv() {
   return m ? m[1] : null;
 }
 
-export function computeNpmTag(version) {
-  if (/-beta\./.test(version)) return "beta";
-  if (/-rc\./.test(version)) return "rc";
-  if (/-alpha\./.test(version)) return "alpha";
+export function computeNpmTag() {
   return "latest";
 }
 
@@ -181,7 +177,7 @@ function checkVersions({ requireTag, quiet = false }) {
 
 function publishPlan({ output }) {
   const v = checkVersions({ requireTag: false, quiet: output === "json" });
-  const tag = computeNpmTag(v.cliVersion);
+  const tag = computeNpmTag();
   const coreExists = npmVersionExists(v.coreName, v.coreVersion);
   const cliExists = npmVersionExists(v.cliName, v.cliVersion);
   const plan = {
@@ -370,7 +366,7 @@ async function verifyPublishedCliManifest() {
 
 async function verifyNpm({ packageFilter }) {
   const v = checkVersions({ requireTag: false });
-  const tag = computeNpmTag(v.cliVersion);
+  const tag = computeNpmTag();
   const packages = [
     { key: "core", name: v.coreName },
     { key: "cli", name: v.cliName },
@@ -423,7 +419,7 @@ async function main() {
   }
   if (cmd === "npm-tag") {
     const v = readVersions();
-    process.stdout.write(computeNpmTag(v.cliVersion) + "\n");
+    process.stdout.write(computeNpmTag() + "\n");
     return;
   }
   if (cmd === "publish-plan") {

@@ -134,20 +134,53 @@ describe("release-preflight verify-packed-cli", () => {
   });
 });
 
+describe("release-preflight npm-tag", () => {
+  it("always prints latest", () => {
+    const out = execFileSync(process.execPath, [scriptPath, "npm-tag"], {
+      cwd: repoRoot,
+      encoding: "utf-8",
+    });
+    expect(out.trim()).toBe("latest");
+  });
+});
+
+describe("release-preflight publish-plan", () => {
+  it("always plans npm publishes with latest", () => {
+    const body =
+      process.platform === "win32"
+        ? `@echo off\r\nif "%1"=="view" (\r\n  echo npm ERR! code E404 1>&2\r\n  echo npm ERR! 404 Not Found 1>&2\r\n  exit /b 1\r\n)\r\necho unexpected args: %* 1>&2\r\nexit /b 1\r\n`
+        : `#!/bin/sh\nif [ "$1" = "view" ]; then\n  printf 'npm ERR! code E404\nnpm ERR! 404 Not Found\n' >&2\n  exit 1\nfi\nprintf 'unexpected args: %s\\n' "$*" >&2\nexit 1\n`;
+
+    withTempRegistryScript(body, (mockPath) => {
+      const out = execFileSync(
+        process.execPath,
+        [scriptPath, "publish-plan", "--json"],
+        {
+          cwd: repoRoot,
+          encoding: "utf-8",
+          env: {
+            ...process.env,
+            PATH: `${path.dirname(mockPath)}${path.delimiter}${process.env.PATH ?? ""}`,
+          },
+        },
+      );
+      const plan = JSON.parse(out) as { tag: string };
+      expect(plan.tag).toBe("latest");
+    });
+  });
+});
+
 describe("release-preflight verify-npm", () => {
   it("retries until package version and dist-tag become visible", () => {
     const cliPkg = JSON.parse(fs.readFileSync(cliPkgPath, "utf-8")) as {
       name: string;
       version: string;
     };
-    const tag = cliPkg.version.includes("-beta.")
-      ? "beta"
-      : cliPkg.version.includes("-rc.")
-        ? "rc"
-        : cliPkg.version.includes("-alpha.")
-          ? "alpha"
-          : "latest";
-    const counterPath = path.join(os.tmpdir(), `trellis-release-preflight-npm-counter-${process.pid}-${Date.now()}.txt`);
+    const tag = "latest";
+    const counterPath = path.join(
+      os.tmpdir(),
+      `trellis-release-preflight-npm-counter-${process.pid}-${Date.now()}.txt`,
+    );
 
     const body =
       process.platform === "win32"
@@ -156,14 +189,18 @@ describe("release-preflight verify-npm", () => {
 
     withTempRegistryScript(body, (mockPath) => {
       try {
-        const out = execFileSync(process.execPath, [scriptPath, "verify-npm", "--package", "cli"], {
-          cwd: repoRoot,
-          encoding: "utf-8",
-          env: {
-            ...process.env,
-            PATH: `${path.dirname(mockPath)}${path.delimiter}${process.env.PATH ?? ""}`,
+        const out = execFileSync(
+          process.execPath,
+          [scriptPath, "verify-npm", "--package", "cli"],
+          {
+            cwd: repoRoot,
+            encoding: "utf-8",
+            env: {
+              ...process.env,
+              PATH: `${path.dirname(mockPath)}${path.delimiter}${process.env.PATH ?? ""}`,
+            },
           },
-        });
+        );
         expect(out).toContain(`${cliPkg.name}@${cliPkg.version} visible on npm tag`);
       } finally {
         fs.rmSync(counterPath, { force: true });

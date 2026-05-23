@@ -22,12 +22,9 @@ Behavior:
 - POSIX execution must spawn `npm` directly without shell execution.
 - Windows execution must route through `cmd.exe /d /s /c npm install -g ...`
   instead of directly spawning `npm.cmd`.
-- Uses the current CLI channel by default:
-  - stable versions install `@latest`
-  - `-beta.*` versions install `@beta`
-  - `-rc.*` versions install `@rc`
-- `--tag <tag-or-version>` overrides the inferred channel. Accept simple npm
-  dist-tags or versions such as `latest`, `beta`, `rc`, or `0.6.0-beta.8`.
+- Uses `@latest` by default for all installed CLI versions.
+- `--tag <tag-or-version>` overrides the default target. Accept simple npm
+  dist-tags or versions such as `latest` or `0.6.0-beta.8`.
 - `--dry-run` prints the exact npm command and exits without changing anything.
 
 The implementation does not detect or preserve the original installer. Trellis
@@ -89,7 +86,7 @@ session-start update hints.
 
 ## Test requirements
 
-- Tag inference: stable → `latest`, beta → `beta`, RC → `rc`.
+- Default target: all installed versions resolve to `latest` unless `--tag` overrides it.
 - Explicit tag override.
 - Invalid tag rejection.
 - POSIX direct npm command with `shell: false`.

@@ -146,9 +146,9 @@ Opt-in to apply file migrations (renames/deletes/dir renames). Without it: migra
 
 `safe-file-delete` migrations are independent of `--migrate` — they always run when their hash gate passes (see Apply Phase). Rationale in `migrations.md`.
 
-### Tag flag (`--tag <beta|rc|latest>`)
+### Tag flag (`--tag <latest>` or explicit version on `trellis upgrade`)
 
-There is no `--tag` flag on `trellis update` today. Version selection is implicit: `update()` always uses the version of the installed CLI (`constants/version.ts:VERSION`). Users who want a specific CLI channel should run `trellis upgrade --tag beta` (or `latest` / `rc`) first, then run `trellis update`. The npm-version check in `commands/update.ts:getLatestNpmVersion` only looks at the `latest` dist-tag and is purely advisory ("⚠️ Your CLI is behind npm").
+There is no `--tag` flag on `trellis update` today. Version selection is implicit: `update()` always uses the version of the installed CLI (`constants/version.ts:VERSION`). Users who want a specific CLI version should run `trellis upgrade --tag latest` or `trellis upgrade --tag <version>` first, then run `trellis update`. The npm-version check in `commands/update.ts:getLatestNpmVersion` only looks at the `latest` dist-tag and is purely advisory ("⚠️ Your CLI is behind npm").
 
 ---
 

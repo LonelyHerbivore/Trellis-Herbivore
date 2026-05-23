@@ -37,20 +37,18 @@ export interface UpgradeCommandPlan {
 const NPM_TAG_RE = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
 
 export function resolveUpgradeTag(
-  currentVersion: string = VERSION,
+  _currentVersion: string = VERSION,
   requestedTag?: string,
 ): string {
   if (requestedTag) {
     if (!NPM_TAG_RE.test(requestedTag)) {
       throw new Error(
-        `Invalid npm tag/version "${requestedTag}". Use a simple dist-tag or version such as latest, beta, rc, or 0.6.0-beta.8.`,
+        `Invalid npm tag/version "${requestedTag}". Use a simple dist-tag or version such as latest or 0.6.0-beta.8.`,
       );
     }
     return requestedTag;
   }
 
-  if (currentVersion.includes("-beta")) return "beta";
-  if (currentVersion.includes("-rc")) return "rc";
   return "latest";
 }
 

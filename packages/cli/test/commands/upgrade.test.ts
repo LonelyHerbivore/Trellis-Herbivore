@@ -10,12 +10,12 @@ describe("upgrade command", () => {
     expect(resolveUpgradeTag("0.5.12")).toBe("latest");
   });
 
-  it("defaults beta versions to beta", () => {
-    expect(resolveUpgradeTag("0.6.0-beta.8")).toBe("beta");
+  it("defaults beta versions to latest", () => {
+    expect(resolveUpgradeTag("0.6.0-beta.8")).toBe("latest");
   });
 
-  it("defaults rc versions to rc", () => {
-    expect(resolveUpgradeTag("0.5.0-rc.7")).toBe("rc");
+  it("defaults rc versions to latest", () => {
+    expect(resolveUpgradeTag("0.5.0-rc.7")).toBe("latest");
   });
 
   it("honors an explicit tag or version", () => {

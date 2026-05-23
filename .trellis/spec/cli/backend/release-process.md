@@ -50,7 +50,7 @@ node packages/cli/scripts/release-preflight.js verify-npm --package all
 |---|---|
 | Shared version | `packages/cli/package.json` and `packages/core/package.json` must have the same `version`. |
 | Shared tag | Git tag `v<version>` must match both package versions. |
-| Shared npm dist-tag | `beta` for `-beta.N`, `rc` for `-rc.N`, `alpha` for `-alpha.N`, `latest` for GA. |
+| Shared npm dist-tag | `latest` for all published versions. |
 | Source dependency | CLI source depends on core with `workspace:*`. |
 | Packed dependency | Published CLI package must depend on `trellis-hgl-core` with the exact release version. |
 
@@ -71,9 +71,9 @@ node packages/cli/scripts/release-preflight.js publish-plan
 | Track | Branch pattern | Version pattern | npm tag | Notes |
 |---|---|---|---|---|
 | Stable | `main` | `X.Y.Z` | `latest` | Patch/minor/major GA releases. |
-| Beta | `feat/vX.Y.Z-beta` or equivalent long-lived beta branch | `X.Y.Z-beta.N` | `beta` | Feature incubation. CLI and core both publish beta versions. |
-| RC | release candidate branch or the stabilized beta branch | `X.Y.Z-rc.N` | `rc` | Pre-GA validation. CLI and core both publish rc versions. |
-| GA promotion | stable release branch / `main` | `X.Y.Z` | `latest` | Promote the release candidate into the stable docs and latest npm tag. |
+| Beta | `feat/vX.Y.Z-beta` or equivalent long-lived beta branch | `X.Y.Z-beta.N` | `latest` | Feature incubation. CLI and core still publish beta versions, but the npm dist-tag remains `latest`. |
+| RC | release candidate branch or the stabilized beta branch | `X.Y.Z-rc.N` | `latest` | Pre-GA validation. CLI and core still publish rc versions, but the npm dist-tag remains `latest`. |
+| GA promotion | stable release branch / `main` | `X.Y.Z` | `latest` | Stable releases also publish as `latest`. |
 
 A new beta cycle starts from the current stable/release baseline and uses the next minor or major version, for example `0.6.0-beta.0` after `0.5.x`. It does not continue an older beta line after that line has moved to RC or GA.
 

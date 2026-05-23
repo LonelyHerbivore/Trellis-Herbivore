@@ -216,7 +216,7 @@ Do not pad findings. A clean diff can be `[VERDICT] ship`.
 ### Release Flow
 
 - `package.json` version is not manually bumped for release prep.
-- npm dist-tags are verified for latest/beta/rc when release behavior matters.
+- npm dist-tags are verified against the release policy in `release-process.md` when release behavior matters.
 - GitHub Actions failure from duplicate publish is distinguished from package
   failure.
 - Stable and beta branches keep manifest continuity.
