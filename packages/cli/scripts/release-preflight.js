@@ -221,20 +221,61 @@ function publishPlan({ output }) {
   return plan;
 }
 
-function packWorkspacePackage(packageDir, destinationDir) {
-  const out = execSync(`pnpm pack --pack-destination ${destinationDir}`, {
-    cwd: packageDir,
-    encoding: "utf-8",
-    stdio: ["pipe", "pipe", "pipe"],
-  });
-  const last = out.trim().split("\n").filter(Boolean).pop() || "";
-  let packed = last.startsWith("/") ? last : path.join(destinationDir, last);
-  if (!fs.existsSync(packed)) {
-    const tgz = fs.readdirSync(destinationDir).find((f) => f.endsWith(".tgz"));
-    if (!tgz) fail(`pnpm pack did not produce a tarball in ${destinationDir}`);
-    packed = path.join(destinationDir, tgz);
+function snapshotFile(filePath) {
+  if (!fs.existsSync(filePath)) {
+    return { exists: false, content: null };
   }
-  return packed;
+  return { exists: true, content: fs.readFileSync(filePath) };
+}
+
+function restoreFileSnapshot(filePath, snapshot) {
+  if (snapshot.exists) {
+    fs.writeFileSync(filePath, snapshot.content);
+    return;
+  }
+  fs.rmSync(filePath, { force: true });
+}
+
+function withSyncedPackageDocs(packageDir, callback) {
+  const pkg = readJSON(path.join(packageDir, "package.json"));
+  if (!pkg.scripts?.["sync-package-docs"]) {
+    return callback();
+  }
+
+  const readmePath = path.join(packageDir, "README.md");
+  const licensePath = path.join(packageDir, "LICENSE");
+  const rootReadmePath = path.join(REPO_ROOT, "README.md");
+  const rootLicensePath = path.join(REPO_ROOT, "LICENSE");
+  const readmeSnapshot = snapshotFile(readmePath);
+  const licenseSnapshot = snapshotFile(licensePath);
+
+  fs.copyFileSync(rootReadmePath, readmePath);
+  fs.copyFileSync(rootLicensePath, licensePath);
+
+  try {
+    return callback();
+  } finally {
+    restoreFileSnapshot(readmePath, readmeSnapshot);
+    restoreFileSnapshot(licensePath, licenseSnapshot);
+  }
+}
+
+function packWorkspacePackage(packageDir, destinationDir) {
+  return withSyncedPackageDocs(packageDir, () => {
+    const out = execSync(`pnpm pack --pack-destination ${destinationDir}`, {
+      cwd: packageDir,
+      encoding: "utf-8",
+      stdio: ["pipe", "pipe", "pipe"],
+    });
+    const last = out.trim().split("\n").filter(Boolean).pop() || "";
+    let packed = path.isAbsolute(last) ? last : path.join(destinationDir, last);
+    if (!fs.existsSync(packed)) {
+      const tgz = fs.readdirSync(destinationDir).find((f) => f.endsWith(".tgz"));
+      if (!tgz) fail(`pnpm pack did not produce a tarball in ${destinationDir}`);
+      packed = path.join(destinationDir, tgz);
+    }
+    return packed;
+  });
 }
 
 function packedCliCoreDependency() {

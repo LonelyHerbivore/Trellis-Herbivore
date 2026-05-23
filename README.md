@@ -23,7 +23,7 @@
 <p align="center">
 <a href="https://www.npmjs.com/package/trellis-hgl"><img src="https://img.shields.io/npm/v/trellis-hgl.svg?style=flat-square&color=2563eb" alt="npm version" /></a>
 <a href="https://www.npmjs.com/package/trellis-hgl"><img src="https://img.shields.io/npm/dw/trellis-hgl?style=flat-square&color=cb3837&label=downloads" alt="npm downloads" /></a>
-<a href="https://github.com/mindfold-ai/Trellis/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-AGPL--3.0-16a34a.svg?style=flat-square" alt="license" /></a>
+<a href="https://github.com/LonelyHerbivore/Trellis-Herbivore/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-AGPL--3.0-16a34a.svg?style=flat-square" alt="license" /></a>
 <a href="https://linux.do"><img src="https://img.shields.io/badge/LINUX-DO-FFB003.svg?style=flat-square" alt="LinuxDo" /></a>
 </p>
 
@@ -326,9 +326,9 @@ trellis init -u your-name --claude
 - [支持平台](https://docs.trytrellis.app/zh/guide/ch13-multi-platform)
 - [使用场景](https://docs.trytrellis.app/zh/guide/ch08-real-world)
 - [更新日志](https://docs.trytrellis.app/zh/changelog/v0.3.6)
-- [GitHub Issues](https://github.com/mindfold-ai/Trellis/issues)
+- [GitHub Issues](https://github.com/LonelyHerbivore/Trellis-Herbivore/issues)
 
 <p align="center">
-<a href="https://github.com/mindfold-ai/Trellis">官方仓库</a> •
-<a href="https://github.com/mindfold-ai/Trellis/blob/main/LICENSE">AGPL-3.0 License</a>
+<a href="https://github.com/LonelyHerbivore/Trellis-Herbivore">当前发布仓库</a> •
+<a href="https://github.com/LonelyHerbivore/Trellis-Herbivore/blob/main/LICENSE">AGPL-3.0 License</a>
 </p>

@@ -28,7 +28,8 @@
     "typecheck": "tsc --noEmit",
     "lint:py": "basedpyright",
     "lint:all": "pnpm lint && pnpm lint:py",
-    "prepublishOnly": "pnpm run build && node -e \"const fs=require('node:fs'); fs.copyFileSync('../../README.md','README.md'); fs.copyFileSync('../../LICENSE','LICENSE');\"",
+    "sync-package-docs": "node -e \"const fs=require('node:fs'); fs.copyFileSync('../../README.md','README.md'); fs.copyFileSync('../../LICENSE','LICENSE');\"",
+    "prepublishOnly": "pnpm run build && pnpm run sync-package-docs",
     "release": "node scripts/release.js patch",
     "release:minor": "node scripts/release.js minor",
     "release:major": "node scripts/release.js major",
@@ -85,6 +86,6 @@
   ],
   "repository": {
     "type": "git",
-    "url": "https://github.com/mindfold-ai/trellis.git"
+    "url": "https://github.com/LonelyHerbivore/Trellis-Herbivore.git"
   }
 }

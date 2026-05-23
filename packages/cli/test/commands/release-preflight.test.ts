@@ -87,6 +87,51 @@ describe("release-preflight verify-packed-cli", () => {
       },
     );
   });
+
+  it("accepts absolute tarball paths from pnpm pack output", () => {
+    const cliPkg = JSON.parse(fs.readFileSync(cliPkgPath, "utf-8")) as {
+      name: string;
+      version: string;
+    };
+    const corePkg = JSON.parse(fs.readFileSync(corePkgPath, "utf-8")) as {
+      name: string;
+    };
+    const tmpRoot = fs.mkdtempSync(
+      path.join(os.tmpdir(), "trellis-release-preflight-abs-"),
+    );
+    const tarball = path.join(tmpRoot, `${cliPkg.name}-${cliPkg.version}.tgz`);
+
+    const pnpmBody =
+      process.platform === "win32"
+        ? `@echo off\r\nif "%1"=="pack" if "%2"=="--pack-destination" (\r\n  type nul > "${tarball.replace(/\//g, "\\")}"\r\n  echo ${tarball}\r\n  exit /b 0\r\n)\r\necho unexpected args: %* 1>&2\r\nexit /b 1\r\n`
+        : `#!/bin/sh\nif [ "$1" = "pack" ] && [ "$2" = "--pack-destination" ]; then\n  : > "${tarball}"\n  printf '${tarball}\\n'\n  exit 0\nfi\nprintf 'unexpected args: %s\\n' "$*" >&2\nexit 1\n`;
+    const tarBody =
+      process.platform === "win32"
+        ? `@echo off\r\nif not "%1"=="-xzf" exit /b 1\r\nif not "%2"=="${path.basename(tarball)}" exit /b 1\r\nif not "%3"=="-C" exit /b 1\r\nif not "%4"=="extract" exit /b 1\r\nif not "%5"=="package/package.json" exit /b 1\r\nmkdir "extract\\package" >nul 2>nul\r\n> "extract\\package\\package.json" echo {"dependencies":{"${corePkg.name}":"${cliPkg.version}"}}\r\nexit /b 0\r\n`
+        : `#!/bin/sh\nif [ "$1" != "-xzf" ] || [ "$2" != "${path.basename(tarball)}" ] || [ "$3" != "-C" ] || [ "$4" != "extract" ] || [ "$5" != "package/package.json" ]; then\n  printf 'unexpected args: %s\\n' "$*" >&2\n  exit 1\nfi\nmkdir -p extract/package\nprintf '{"dependencies":{"${corePkg.name}":"${cliPkg.version}"}}' > extract/package/package.json\n`;
+
+    withTempBinScripts(
+      [
+        { name: process.platform === "win32" ? "pnpm.cmd" : "pnpm", body: pnpmBody },
+        { name: process.platform === "win32" ? "tar.cmd" : "tar", body: tarBody },
+      ],
+      (binDir) => {
+        try {
+          const out = execFileSync(process.execPath, [scriptPath, "verify-packed-cli"], {
+            cwd: repoRoot,
+            encoding: "utf-8",
+            env: {
+              ...process.env,
+              PATH: `${binDir}${path.delimiter}${process.env.PATH ?? ""}`,
+            },
+          });
+          expect(out).toContain("packed CLI pins");
+        } finally {
+          fs.rmSync(tmpRoot, { recursive: true, force: true });
+        }
+      },
+    );
+  });
 });
 
 describe("release-preflight verify-npm", () => {
