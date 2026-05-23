@@ -1,0 +1,9 @@
+{
+  "version": "0.6.0-beta.23",
+  "description": "Beta patch: align release tests with current platform behavior and make Claude review gates read-only Opus reviewers.",
+  "breaking": false,
+  "recommendMigrate": false,
+  "changelog": "**Enhancements:**\n- feat(workflow): Claude review gates now run as read-only Opus reviewers that report blocking issues without modifying code, while the main agent remains responsible for repairs and repeated-block escalation.\n\n**Bug Fixes:**\n- fix(release): release-related tests now align with current cross-platform behavior so publish-path validation matches the actual supported environments.",
+  "migrations": [],
+  "notes": "Run `npm install -g trellis-hgl@beta` and `trellis update` to refresh workflow and review gate templates. No file migration is required."
+}

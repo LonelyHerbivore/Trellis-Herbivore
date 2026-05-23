@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -308,5 +308,48 @@ describe("release-preflight verify-published-cli-manifest", () => {
         ),
       ).toThrowError(/published CLI metadata.*workspace:\*/s);
     });
+  });
+});
+
+describe("check-docs-changelog", () => {
+  it("skips when docs-site is absent from the checkout", () => {
+    const tmpRoot = fs.mkdtempSync(
+      path.join(os.tmpdir(), "trellis-check-docs-changelog-"),
+    );
+    const cliDir = path.join(tmpRoot, "packages", "cli");
+    const scriptsDir = path.join(cliDir, "scripts");
+    const checkScriptPath = path.join(scriptsDir, "check-docs-changelog.js");
+
+    fs.mkdirSync(scriptsDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(cliDir, "package.json"),
+      JSON.stringify({ version: "0.6.0-beta.23" }, null, 2),
+      "utf-8",
+    );
+    fs.copyFileSync(
+      path.join(repoRoot, "packages/cli/scripts/check-docs-changelog.js"),
+      checkScriptPath,
+    );
+    fs.copyFileSync(
+      path.join(repoRoot, "packages/cli/scripts/bump-versions.js"),
+      path.join(scriptsDir, "bump-versions.js"),
+    );
+
+    try {
+      const result = spawnSync(
+        process.execPath,
+        [checkScriptPath, "--type", "beta"],
+        {
+          cwd: tmpRoot,
+          encoding: "utf-8",
+        },
+      );
+
+      expect(result.status).toBe(0);
+      expect(result.stderr).toContain("docs-site/");
+      expect(result.stderr).toContain("skipping changelog guard");
+    } finally {
+      fs.rmSync(tmpRoot, { recursive: true, force: true });
+    }
   });
 });

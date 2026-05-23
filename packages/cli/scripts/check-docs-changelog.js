@@ -52,6 +52,13 @@ function main() {
   const current = readPackageVersion();
   const target = computeNext(current, type);
 
+  if (!fs.existsSync(DOCS_SITE)) {
+    console.warn(
+      `⚠️ docs-site/ is not present in this checkout; skipping changelog guard for v${target}.`,
+    );
+    return;
+  }
+
   const missing = [];
   const enPath = path.join(DOCS_SITE, "changelog", `v${target}.mdx`);
   const zhPath = path.join(DOCS_SITE, "zh", "changelog", `v${target}.mdx`);
