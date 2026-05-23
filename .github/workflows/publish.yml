@@ -67,8 +67,10 @@ jobs:
         shell: bash
         run: |
           node packages/cli/scripts/release-preflight.js pack-publish-artifacts > publish-artifacts.json
-          echo "core_tarball=$(node -e \"const fs=require('node:fs'); const data=JSON.parse(fs.readFileSync('publish-artifacts.json','utf8')); process.stdout.write(data.core.tarball);\")" >> "$GITHUB_OUTPUT"
-          echo "cli_tarball=$(node -e \"const fs=require('node:fs'); const data=JSON.parse(fs.readFileSync('publish-artifacts.json','utf8')); process.stdout.write(data.cli.tarball);\")" >> "$GITHUB_OUTPUT"
+          core_tarball=$(node -e "const fs=require('node:fs'); const data=JSON.parse(fs.readFileSync('publish-artifacts.json','utf8')); process.stdout.write(data.core.tarball);")
+          cli_tarball=$(node -e "const fs=require('node:fs'); const data=JSON.parse(fs.readFileSync('publish-artifacts.json','utf8')); process.stdout.write(data.cli.tarball);")
+          printf 'core_tarball=%s\n' "$core_tarball" >> "$GITHUB_OUTPUT"
+          printf 'cli_tarball=%s\n' "$cli_tarball" >> "$GITHUB_OUTPUT"
 
       - name: Publish trellis-hgl-core
         if: steps.plan.outputs.core_publish == 'true'
