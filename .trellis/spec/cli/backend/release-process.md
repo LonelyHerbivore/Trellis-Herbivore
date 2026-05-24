@@ -148,7 +148,7 @@ pnpm release:promote
 `packages/cli/scripts/release.js` runs:
 
 1. `check-manifest-continuity`
-2. `check-docs-changelog --type beta|rc|promote` for prerelease/promotion tracks
+2. `check-docs-changelog --type beta|rc|promote` for prerelease/promotion tracks when `docs-site/` exists in the current checkout; if the docs-site worktree is absent, the guard warns and skips.
 3. core tests
 4. CLI tests
 5. pre-release commit excluding `docs-site` and `marketplace`
@@ -194,9 +194,9 @@ Core publishes first because the CLI package depends on the exact core version i
 - [ ] Worktree is clean except intentional release changes.
 - [ ] Relevant coding specs have been read.
 - [ ] Manifest exists for the target version.
-- [ ] English and Chinese docs-site changelogs exist and match 1:1.
-- [ ] `docs-site/docs.json` points to the new changelog.
-- [ ] Submodule commits are pushed before main repo pointer commits.
+- [ ] If `docs-site/` exists in the current checkout, English and Chinese docs-site changelogs exist and match 1:1.
+- [ ] If `docs-site/` exists in the current checkout, `docs-site/docs.json` points to the new changelog.
+- [ ] If `docs-site/` exists in the current checkout, submodule commits are pushed before main repo pointer commits.
 - [ ] `node packages/cli/scripts/release-preflight.js check-versions` passes.
 - [ ] `node packages/cli/scripts/release-preflight.js verify-packed-cli` passes.
 - [ ] `pnpm lint && pnpm typecheck && pnpm test` pass or the blocker is recorded.
