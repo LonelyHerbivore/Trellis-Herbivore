@@ -116,6 +116,47 @@ describe("getAllAgents", () => {
       expect(content).toContain("reports blocking issues to the main session");
     }
   });
+
+  it("trellis implement and check agents preserve explicit review-gate contract semantics", () => {
+    const agents = new Map(
+      getAllAgents().map((agent) => [agent.name, agent.content]),
+    );
+
+    for (const name of ["trellis-implement", "trellis-check"]) {
+      const content = agents.get(name);
+      expect(content).toBeDefined();
+      expect(content).toContain("Review-gate contract: explicit-selection-v1");
+      expect(content).toContain("Review-gate contract: explicit-selection-v1");
+      expect(content).toContain("Optional review gates status: configured");
+      expect(content).toContain("trellis-improve-codebase-architecture");
+      expect(content).toContain("trellis-code-architecture-review");
+      expect(content).toContain("trellis-merge-review");
+      expect(content).toContain("legacy task");
+    }
+  });
+
+  it("Claude review-gate agents validate the explicit gate contract and deep-review prerequisite", () => {
+    const agents = new Map(
+      getAllAgents().map((agent) => [agent.name, agent.content]),
+    );
+    const reviewGates = [
+      "trellis-spec-review",
+      "trellis-code-review",
+      "trellis-code-architecture-review",
+      "trellis-merge-review",
+    ] as const;
+
+    for (const name of reviewGates) {
+      const content = agents.get(name);
+      expect(content).toBeDefined();
+      expect(content).toContain("## Strategy Alignment");
+      expect(content).toContain("Review-gate contract: explicit-selection-v1");
+      expect(content).toContain("Optional review gates status: configured");
+      expect(content).toContain("verify that `");
+      expect(content).toContain("trellis-code-architecture-review");
+      expect(content).toContain("legacy task");
+    }
+  });
 });
 
 // =============================================================================

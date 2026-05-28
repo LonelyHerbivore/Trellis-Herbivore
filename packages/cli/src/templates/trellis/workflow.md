@@ -116,7 +116,7 @@ python3 ./.trellis/scripts/get_context.py --mode phase --step <X.Y>  # 读取某
     [workflow-state:no_task]      → 没有活动任务；Phase 1 之前
     [workflow-state:planning]     → Phase 1 全阶段（status='planning'）
     [workflow-state:planning-inline] → Codex 的 Phase 1 内联变体
-    [workflow-state:in_progress]  → Phase 2 + Phase 3.1-3.4
+    [workflow-state:in_progress]  → Phase 2 + Phase 3.1-3.5
                                     （从 task.py start 到 task.py archive 期间状态都保持 'in_progress'）
     [workflow-state:in_progress-inline] → Codex 的 Phase 2/3 内联变体
     [workflow-state:completed]    → 当前为 DEAD：cmd_archive 会在同一次调用里改状态并移动目录，
@@ -189,7 +189,7 @@ Planning order for this Claude Code path: `task.py create` → `trellis-brainsto
 `trellis-grill-me` is a required planning gate on this Claude Code path, not an optional suggestion.
 Before `trellis-grill-me` is complete, do not enter development strategy decisions, do not create or complete `design.md` / `implement.md`, and do not run `task.py start`.
 Do not enter development strategy decisions until `prd.md` has been tightened through repository-first clarification and one-question-at-a-time follow-up.
-Before `task.py start`, record the development strategy decisions in the task documents. Complex tasks should store them in `implement.md`: development mode (current session / subagent), branch vs worktree, default flow vs TDD, plus the planned review-gate order: `trellis-spec-review` → `trellis-code-review` → `trellis-code-architecture-review`. If the strategy is `subagent + worktree`, pin the shared path to `./.claude/worktree` and require every code-development subagent to use it. If the strategy is TDD, record `trellis-tdd` as the reference flow. If the task has `架构审查：enabled` in `implement.md`, dispatch `trellis-improve-codebase-architecture` with `架构审查模式: guidance` before `task.py start`, then append its output to `design.md`.
+Before `task.py start`, record the development strategy decisions in the task documents. Complex tasks should store them in `implement.md`: development mode (current session / subagent), branch vs worktree, default flow vs TDD, plus a single `A.` / `B.` / `C.` style strategy block that records the task-level selection for `trellis-spec-review`, `trellis-code-review`, `trellis-code-architecture-review`, `trellis-improve-codebase-architecture`, and `trellis-merge-review`. New tasks must stamp that block with `Review-gate contract: explicit-selection-v1`. Use `Optional review gates status: pending` only while the choice is still open; before `task.py start`, replace it with `Optional review gates status: configured` plus explicit `Enabled optional review gates:` and `Disabled optional review gates:` lists. If the user does not select any optional gate, still record all five in the disabled list and keep `trellis-check` fixed outside the optional set. Only tasks that entirely lack `Review-gate contract: explicit-selection-v1` count as legacy tasks and preserve the old behavior; if the marker exists but the configured enabled/disabled lists are missing, planning is incomplete and the task must not start. `trellis-improve-codebase-architecture` deep-review requires `trellis-code-architecture-review`; do not record or accept deep-review without that prerequisite gate. If the strategy is `subagent + worktree`, pin the shared path to `./.claude/worktree` and require every code-development subagent to use it. If the strategy is TDD, record `trellis-tdd` as the reference flow. Record whether to run pre-development architecture guidance in that same strategy block. If guidance is enabled, record `架构审查：enabled` in `implement.md`, dispatch `trellis-improve-codebase-architecture` with `架构审查模式: guidance` before `task.py start`, and append its output to `design.md`, but do NOT implicitly enable `trellis-improve-codebase-architecture` deep-review; that gate still requires explicit selection in the same task-level review-gate set.
 [/workflow-state:planning]
 
 <!-- Per-turn breadcrumb: shown throughout Phase 1 when codex.dispatch_mode=inline.
@@ -211,27 +211,28 @@ Inline mode: skip jsonl curation; Phase 2 reads artifacts/specs via `trellis-bef
 - 2.3 Rollback `[on demand]`
 
 <!-- Per-turn breadcrumb: shown while status='in_progress'.
-     Scope: all of Phase 2 + Phase 3.1-3.4 (status stays 'in_progress' from
+     Scope: all of Phase 2 + Phase 3.1-3.5 (status stays 'in_progress' from
      task.py start until task.py archive; only archive flips it). The body
      therefore must cover every required step from implementation through
-     archive / optional commit, including Phase 3.3 spec update and any
-     Phase 3.4 commit guidance when a commit is actually needed. -->
+     merge / final verification, including Phase 3.3 spec update, any
+     Phase 3.4 commit guidance when a commit is actually needed, and Phase 3.5
+     build/test plus optional `trellis-merge-review` when enabled. -->
 
 Sub-agent dispatch protocol applies to all platforms and all sub-agents, including class-2 Codex/Copilot/Gemini/Qoder and `trellis-research`: every dispatch prompt starts with `Active task: <task path from task.py current>` before role-specific instructions.
 
 [workflow-state:in_progress]
-Flow: `trellis-implement` -> `trellis-check` -> `trellis-update-spec` -> archive or commit as needed -> `/trellis:finish-work`.
-Claude Code review-gate order: `trellis-spec-review` -> `trellis-code-review` -> `trellis-code-architecture-review`.
+Flow: `trellis-implement` -> `trellis-check` -> `trellis-update-spec` -> archive or commit as needed -> merge if needed -> optional `trellis-merge-review` -> build/test -> `/trellis:finish-work`.
+Claude Code optional review gates: if the task artifacts carry `Review-gate contract: explicit-selection-v1`, preserve the configured selection. Keep any enabled `trellis-spec-review`, `trellis-code-review`, and `trellis-code-architecture-review` in that order, run `trellis-improve-codebase-architecture` and `trellis-merge-review` only when the task strategy explicitly enables them, and keep `trellis-check` fixed outside this optional set. New tasks that use this contract must record `Optional review gates status: configured` plus explicit enabled/disabled lists; if the user picks none, record all five optional gates as disabled. Only tasks that entirely lack the contract marker count as legacy tasks and preserve the old behavior.
 Main-session default: dispatch implement/check sub-agents. Sub-agent self-exemption: if already running as `trellis-implement`, do NOT spawn another `trellis-implement` or `trellis-check`; if already running as `trellis-check`, do NOT spawn another `trellis-check` or `trellis-implement`. Dispatch is main session only.
 Dispatch prompt starts with `Active task: <task path from task.py current>`. Read context: jsonl entries -> `prd.md` -> `design.md if present` -> `implement.md if present`.
 
 Claude review gates are read-only gates. They report PASS / FAIL, blocking issues, and suggested next actions; they do not modify code directly.
 If a Claude review gate fails, the main agent repairs the code, then re-runs the same gate before advancing.
-For `trellis-spec-review`, `trellis-code-review`, `trellis-code-architecture-review`, and `trellis-merge-review`, count repeated failures per gate and per task. If the same gate blocks the same task more than 3 times in a row, the main agent must briefly report that status to the user, re-check whether the requirements have drifted, and ask whether to skip the current review gate.
+For any enabled `trellis-spec-review`, `trellis-code-review`, `trellis-code-architecture-review`, and `trellis-merge-review`, count repeated failures per gate and per task. If the same gate blocks the same task more than 3 times in a row, the main agent must briefly report that status to the user, re-check whether the requirements have drifted, and ask whether to skip the current review gate.
 If the chosen strategy is `subagent + worktree`, all code-development subagents must use the same `./.claude/worktree` path.
 If the chosen strategy is TDD, align implementation and review expectations to `trellis-tdd`.
-If the task is architecture-sensitive or enters structural refactoring, route the architecture pass through `trellis-improve-codebase-architecture` before widening the change.
-If `implement.md` records `架构审查：enabled`, after `trellis-code-architecture-review` passes dispatch `trellis-improve-codebase-architecture` with `架构审查模式: deep-review` plus the changed file list from `git diff --name-only <base_branch>...HEAD`. On failure, report blocking issues and return to `trellis-implement`; re-run the full review loop until deep-review passes.
+If the task strategy enables `trellis-improve-codebase-architecture` and the work is architecture-sensitive or enters structural refactoring, route the architecture pass through `trellis-improve-codebase-architecture` before widening the change.
+If the task strategy enables `trellis-improve-codebase-architecture`, after `trellis-code-architecture-review` passes dispatch `trellis-improve-codebase-architecture` with `架构审查模式: deep-review` plus the changed file list from `git diff --name-only <base_branch>...HEAD`. On failure, report blocking issues and return to `trellis-implement`; re-run the full review loop until deep-review passes. `trellis-improve-codebase-architecture` deep-review requires `trellis-code-architecture-review`; if the task artifacts enable deep-review without that prerequisite gate, treat the strategy record as invalid and repair the task artifacts before continuing. Guidance recorded in `implement.md` is independent and does not by itself enable or block deep-review.
 If the user asks to archive the current task, do not block on commit; archive is allowed even when code is not committed.
 [/workflow-state:in_progress]
 
@@ -357,11 +358,16 @@ brainstorm skill 会指导你：
 
 在 Claude Code 路径进入实现前，把开发策略决策写入任务文档。
 - 轻量任务可以把这些记录写在 `prd.md`。
-- 复杂任务应把这些策略与 review-gate 计划一起写在 `implement.md`。
-- 需要记录：当前会话 vs subagent、当前分支 vs worktree、默认流程 vs TDD。
+- 复杂任务应把这些策略、task-local review-gate 选择，以及任何已启用 Claude review gate 的保序执行顺序写在 `implement.md`。
+- 需要在同一个 `A.` / `B.` / `C.` 风格策略块里记录：当前会话 vs subagent、当前分支 vs worktree、默认流程 vs TDD、是否启用 pre-development architecture guidance，以及 `trellis-spec-review`、`trellis-code-review`、`trellis-code-architecture-review`、`trellis-improve-codebase-architecture`、`trellis-merge-review` 的任务级选择。
+- 新任务必须在这个策略块里写入 `Review-gate contract: explicit-selection-v1`。
+- 当选择尚未完成时，可以临时写 `Optional review gates status: pending`；在 `task.py start` 前必须改成 `Optional review gates status: configured`，并显式写出 `Enabled optional review gates:` / `Disabled optional review gates:`。
+- 如果用户没有选中任何可选 gate，也要把这 5 个 gate 全部写进 disabled 列表；`trellis-check` 固定保留在这组之外。
+- 只有完全缺少 `Review-gate contract: explicit-selection-v1` 标记的任务才视为 legacy task，并沿用旧行为；如果标记已存在但缺少 configured 的 enabled/disabled 列表，说明 planning 未完成，不能启动任务。
+- `trellis-improve-codebase-architecture` deep-review 依赖 `trellis-code-architecture-review`；不要记录或接受只开 deep-review、不开号 architecture-review 的组合。
 - 如果选择 `subagent + worktree`，将 `./.claude/worktree` 固定为所有代码开发子代理共享的路径。
 - 如果选择 TDD，记录 `trellis-tdd` 作为参考流程，并让后续实现与评审都对齐到它。
-- 如果任务涉及架构治理、重构收敛或避免结构劣化，进入 `trellis-improve-codebase-architecture` 作为显式入口与自动调用入口。
+- 如果启用了 pre-development architecture guidance，在 `task.py start` 之前运行 `trellis-improve-codebase-architecture` guidance 并把结果追加到 `design.md`；但这不会隐式开启 `trellis-improve-codebase-architecture` deep-review，后者仍需在 review-gate 选择里显式启用。
 
 每当需求变化，就回到此步骤并修订相关产物。
 
@@ -455,7 +461,7 @@ python3 ./.trellis/scripts/task.py add-context "$TASK_DIR" check "<path>" "<reas
 python3 ./.trellis/scripts/task.py start <task-dir>
 ```
 
-对于轻量任务，`prd.md` 可以足够。对于复杂任务，必须先存在并 review 完成 `prd.md`、`design.md` 和 `implement.md`。在 Claude Code 路径下，只有当任务文档已经记录开发策略决策后才能 start；复杂任务应把这些记录以及计划中的 review-gate 顺序写在 `implement.md` 中，轻量任务则可写在 `prd.md` 中。对于支持子代理的平台，当任务需要额外 spec / research 上下文时，应整理 jsonl manifest；仅含种子行的 manifest 也会被消费者容忍，但不算真正完成该步。
+对于轻量任务，`prd.md` 可以足够。对于复杂任务，必须先存在并 review 完成 `prd.md`、`design.md` 和 `implement.md`。在 Claude Code 路径下，只有当任务文档已经记录开发策略决策后才能 start；复杂任务应把这些记录、enabled/disabled 的 review-gate 选择，以及任何已启用 Claude review gate 的保序执行顺序写在 `implement.md` 中，轻量任务则可写在 `prd.md` 中。对于支持子代理的平台，当任务需要额外 spec / research 上下文时，应整理 jsonl manifest；仅含种子行的 manifest 也会被消费者容忍，但不算真正完成该步。
 
 命令成功后，breadcrumb 会自动切换到 `[workflow-state:in_progress]`，后续 Phase 2 / 3 将按此继续。
 
@@ -543,14 +549,22 @@ Codex 子代理定义会自动处理上下文加载。The Codex sub-agent defini
 
 [Claude Code, Cursor, OpenCode, codex-sub-agent, Kiro, Gemini, Qoder, CodeBuddy, Copilot, Droid, Pi]
 
-对于 Claude Code 路径，实现完成后按顺序运行三个明确的 review gate：
+对于 Claude Code 路径，实现完成后按任务策略运行显式选中的 review gate。
+
+- 若启用了 `trellis-spec-review`、`trellis-code-review`、`trellis-code-architecture-review`，保持这个顺序：
 
 1. `trellis-spec-review`
 2. `trellis-code-review`
 3. `trellis-code-architecture-review`
 
-Do not advance to the next gate until the previous gate passes. Each gate must review the code against `prd.md`, `design.md` if present, `implement.md` if present, and the relevant specs; on FAIL, the main agent fixes the blocking issues and re-runs the same gate before continuing.
-If the same gate blocks the same task more than 3 times in a row, the main agent must briefly report that status to the user, re-check whether the requirements have drifted, and ask whether to skip the current review gate.
+- 如果任务文档带有 `Review-gate contract: explicit-selection-v1`，则严格按 `Optional review gates status: configured`、`Enabled optional review gates:`、`Disabled optional review gates:` 执行。
+- `trellis-improve-codebase-architecture` 与 `trellis-merge-review` 只有在任务策略显式启用时才运行。
+- 对新任务，如果用户没有选择任何可选 gate，也要把这 5 个 gate 全部显式写进 disabled 列表；`trellis-check` 继续固定保留。
+- 只有完全缺少 `Review-gate contract: explicit-selection-v1` 标记的任务才视为 legacy task，并沿用旧行为。
+- 如果标记已存在但缺少 configured 的 enabled/disabled 列表，或出现只开 `trellis-improve-codebase-architecture` deep-review、不启用 `trellis-code-architecture-review` 的组合，则任务策略无效，必须先修复任务文档再继续。
+
+Do not advance to the next gate until the previous gate passes. Each enabled gate must review the code against `prd.md`, `design.md` if present, `implement.md` if present, and the relevant specs; on FAIL, the main agent fixes the blocking issues and re-runs the same gate before continuing.
+If the same enabled gate blocks the same task more than 3 times in a row, the main agent must briefly report that status to the user, re-check whether the requirements have drifted, and ask whether to skip the current review gate.
 
 如果当前平台还没有专用的 review-gate agent，则继续使用 `trellis-check` 作为兼容回退：
 
@@ -676,14 +690,14 @@ AI 会驱动一次按批次组织的提交，让 `/finish-work` 后续能在干�
    - 如果开发策略是 `subagent + worktree` 或 feature branch，执行合并（`git merge` 到主分支，或通过 PR 合并）。
    - 如果策略是"当前分支直接开发"（无独立分支），跳过合并，直接进入第 2 步。
 
-2. **dispatch `trellis-merge-review` agent**，检查合并结果：
+2. **如果任务策略启用了 `trellis-merge-review`，dispatch `trellis-merge-review` agent**，检查合并结果：
    - 无合并冲突残留
    - 无遗漏文件
    - 合并目标分支状态与 `prd.md` 验收标准对齐
    - `trellis-merge-review` 只负责只读审查与阻塞报告，不直接修复合并结果。
    - 如果 `trellis-merge-review` 返回 FAIL，由主 agent 修复问题后重新执行此步骤；若同一 gate 在同一任务中连续阻塞超过 3 次，由主 agent 升级给用户重新核对需求并询问是否跳过当前 review。
 
-3. **编译 + 测试**：`trellis-merge-review` 返回 PASS 后，在合并目标分支上执行项目的编译命令与完整测试套件。
+3. **编译 + 测试**：如果启用了 `trellis-merge-review`，则在该 gate 返回 PASS 后执行；如果未启用，则在合并完成后直接执行项目的编译命令与完整测试套件。
    - 编译 + 测试全部通过，才允许进入 3.6。
    - 如有失败，修复后重新从第 2 步开始。
 
@@ -702,7 +716,7 @@ AI 会驱动一次按批次组织的提交，让 `/finish-work` 后续能在干�
 直接编辑上面 Phase 1 / 2 / 3 中对应步骤的 walkthrough 内容。关键不变量：
 - 没有活动任务时，必须先做请求分流，并在创建 Trellis 任务前征得 task-creation consent。
 - planning 必须区分：轻量 PRD-only 任务 vs 需要在 start 前补齐 `prd.md`、`design.md`、`implement.md` 的复杂任务。
-- 每条 required 的执行路径都必须保留通往 Phase 3.4 commit 提醒的可达性，不能在 `/trellis:finish-work` 前丢失。
+- 每条 required 的执行路径都必须保留通往 Phase 3.4 commit 提醒与 Phase 3.5 merge/final verification 的可达性，不能在 `/trellis:finish-work` 前丢失。
 
 所有 tag block 都位于上方 `## Phase Index` 区域、紧跟在各阶段摘要之后：
 
@@ -711,8 +725,8 @@ AI 会驱动一次按批次组织的提交，让 `/finish-work` 后续能在干�
 | 无活动任务（Phase 1 之前） | `[workflow-state:no_task]`（位于 Phase Index ASCII art 之后） |
 | Phase 1 全阶段（任务已创建 → 准备进入实现） | `[workflow-state:planning]`（位于 Phase 1 摘要之后） |
 | Codex inline 的 Phase 1 | `[workflow-state:planning-inline]` |
-| Phase 2 + Phase 3.1–3.4（实现 + 检查 + 收尾） | `[workflow-state:in_progress]`（位于 Phase 2 摘要之后） |
-| Codex inline 的 Phase 2 + Phase 3.1–3.4 | `[workflow-state:in_progress-inline]` |
+| Phase 2 + Phase 3.1–3.5（实现 + 检查 + 收尾） | `[workflow-state:in_progress]`（位于 Phase 2 摘要之后） |
+| Codex inline 的 Phase 2 + Phase 3.1–3.5 | `[workflow-state:in_progress-inline]` |
 | Phase 3.5 之后（已 archive） | `[workflow-state:completed]`（位于 Phase 3 摘要之后；**currently DEAD**） |
 
 ### Changing the per-turn prompt text

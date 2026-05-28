@@ -58,14 +58,16 @@
    - 当前会话直做，还是 subagent
    - 当前分支直改，还是 worktree
    - 默认流程，还是 TDD
+   - 这次任务要不要启用 `trellis-spec-review`、`trellis-code-review`、`trellis-code-architecture-review`、`trellis-improve-codebase-architecture`、`trellis-merge-review`
 
 4. **把 AI 容易忽略的工程门禁变成显式节点**
-   - `trellis-check`
-   - `trellis-spec-review`
-   - `trellis-code-review`
-   - `trellis-code-architecture-review`
-   - 按需触发 `trellis-improve-codebase-architecture`
-   - merge review 与最终 build/test
+   - 固定保留：`trellis-check`
+   - 任务级可选：`trellis-spec-review`
+   - 任务级可选：`trellis-code-review`
+   - 任务级可选：`trellis-code-architecture-review`
+   - 任务级可选：`trellis-improve-codebase-architecture`
+   - 任务级可选：`trellis-merge-review`
+   - 最终 build/test 继续保留
   
 5. **随时可跳出Trellis流程**
    - 随时都可以直接对Claude说: "当前任务直接存档"，即可跳出工作流直接结束任务
@@ -97,13 +99,16 @@
 
 这个分支把质量控制拆成几层：
 
-- 综合检查：`trellis-check`
-- 串行门禁：
+- 固定检查：`trellis-check`
+- 任务级可选 gate：
   - `trellis-spec-review`
   - `trellis-code-review`
   - `trellis-code-architecture-review`
-- 架构敏感任务额外深审：`trellis-improve-codebase-architecture`
-- 合并后再做：`trellis-merge-review` + `build/test`
+  - `trellis-improve-codebase-architecture`
+  - `trellis-merge-review`
+- 其中 `trellis-spec-review` → `trellis-code-review` → `trellis-code-architecture-review` 一旦启用，仍保持这个顺序
+- 对新任务，这 5 个可选 gate 默认全关；对老任务，若任务文档没有选择记录，则沿用旧行为
+- 最终 `build/test` 继续保留
 
 ## 工作流总览
 
@@ -115,30 +120,32 @@
 → task.py create
 → trellis-brainstorm
 → trellis-grill-me
-→ 开发策略决策
+→ 开发策略决策（同一选项块里确定 subagent/worktree/TDD/review gates）
 → （按需）trellis-improve-codebase-architecture guidance
 → task.py start
 → trellis-implement
 → trellis-check
-→ trellis-spec-review
-→ trellis-code-review
-→ trellis-code-architecture-review
-→ （按需）trellis-improve-codebase-architecture deep-review
+→ （按任务选择）trellis-spec-review
+→ （按任务选择）trellis-code-review
+→ （按任务选择）trellis-code-architecture-review
+→ （按任务选择）trellis-improve-codebase-architecture deep-review
 → trellis-update-spec
 → 提交代码
 → 主 agent 合并
-→ trellis-merge-review
+→ （按任务选择）trellis-merge-review
 → build/test
 → /trellis:finish-work
 ```
 
 ### 开发策略决策包含什么
 
-进入实现前，至少要明确三项：
+进入实现前，至少要明确五项：
 
 1. 当前会话持续开发，还是 subagent
 2. 当前分支直接开发，还是 worktree
 3. 走 Trellis 默认开发流程，还是 TDD
+4. 这次任务要启用哪些 review gate（5 个可选 gate 必须落盘为 `Review-gate contract: explicit-selection-v1` + `Optional review gates status: configured` + enabled/disabled 列表；就算 5 个都不启用，也要显式写进 disabled，`trellis-check` 固定保留）
+5. 是否在进入实现前运行 `trellis-improve-codebase-architecture guidance`（这不会隐式开启 deep-review；后者仍需在 review gate 里显式选择，而且 deep-review 依赖 `trellis-code-architecture-review`）
 
 如果选择 `subagent + worktree`，本分支约定所有代码开发子代理固定使用同一个路径：
 

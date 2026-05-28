@@ -200,7 +200,7 @@ Which breadcrumbs actually fire in normal flow:
 | `completed` | ❌ DEAD in normal flow | `cmd_archive` writes `status="completed"` and immediately moves the task dir to `archive/`. The session-pointer cleanup in `clear_task_from_sessions` runs before the move, so the resolver loses the pointer in the same call. The block body in workflow.md is preserved for a future status-transition redesign (e.g. an explicit `in_progress → completed` command) but no current code path produces it. |
 | `stale_<source_type>` | ✅ reachable (rare) | Synthesized when the session pointer references a deleted task directory. Emits the generic body via `build_breadcrumb` because no `stale_*` tag is shipped. |
 
-**Test invariant** (`test/regression.test.ts`): workflow-state blocks must
+**Test invariant** (`packages/cli/test/templates/trellis.test.ts`): workflow-state blocks must
 preserve the runtime gates that cannot be recovered from model memory:
 `no_task` triages and asks for task-creation consent; planning distinguishes
 lightweight PRD-only tasks from complex tasks requiring `prd.md`, `design.md`,
@@ -208,11 +208,20 @@ and `implement.md`, and on the Claude Code path preserves the visible order
 `trellis-brainstorm` → `trellis-grill-me` → development strategy decision with
 an explicit gate: before `trellis-grill-me` completes, the breadcrumb must
 forbid strategy decisions, `design.md` / `implement.md`, and `task.py start`;
-in-progress keeps the commit step reachable before `/trellis:finish-work`. See:
+planning must also require the explicit `Review-gate contract: explicit-selection-v1`
+marker for new tasks, require configured enabled/disabled optional-gate lists
+before start, keep the legacy fallback limited to tasks that entirely lack that
+marker, and declare that `trellis-improve-codebase-architecture` deep-review
+requires `trellis-code-architecture-review`; in-progress keeps the commit step
+reachable before `/trellis:finish-work` and keeps Phase 3.5 merge/final
+verification reachable, including optional `trellis-merge-review` when enabled
+and the final build/test. See:
 
 - `test that workflow.md [workflow-state:in_progress] mentions commit (Phase 3.4)`
+- `test that workflow.md [workflow-state:in_progress] keeps merge-review/build-test reachable (Phase 3.5)`
 - `test that workflow.md [workflow-state:planning] mentions planning artifact gate`
 - `test that workflow.md [workflow-state:planning] makes trellis-grill-me a required gate`
+- `test that workflow.md [workflow-state:planning] records the unified development-strategy block and task-level review-gate selection contract`
 - `test that workflow.md [workflow-state:no_task] asks for task-creation consent`
 
 ---
@@ -269,7 +278,7 @@ nested Trellis sub-agents.
   Breadcrumb tag updates alone are insufficient because platform routing
   markers outside those tags are runtime input too.
 - Add a writer-table row to this spec when introducing a new status writer.
-- Run the regression tests after editing breadcrumb bodies.
+- Run the template workflow tests plus the regression tests after editing breadcrumb bodies.
 - When adding a `[required · once]` step to the workflow walkthrough, add a
   matching enforcement line to that phase's breadcrumb tag block in the
   same commit.

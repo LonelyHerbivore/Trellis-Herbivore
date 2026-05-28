@@ -13,9 +13,11 @@ import {
   commonCliAdapter,
   getDeveloperScript,
   initDeveloperScript,
+  trellisSwitch,
   taskScript,
   getContextScript,
   addSessionScript,
+  assertTrellisEnabled,
   workflowMdTemplate,
   gitignoreTemplate,
   getAllScripts,
@@ -109,6 +111,13 @@ describe("trellis template constants", () => {
     expect(workflowMdTemplate).toContain("#");
   });
 
+  it("trellisSwitch hides Claude Trellis surfaces when disabled", () => {
+    expect(trellisSwitch).toContain('TRELLIS_SWITCH_COMMAND = "trellis-switch.md"');
+    expect(trellisSwitch).toContain('DISABLED_SUFFIX = ".disabled"');
+    expect(trellisSwitch).toContain('skills_dir.glob("trellis-*")');
+    expect(trellisSwitch).toContain('disabled_command.rename(enabled_command)');
+  });
+
   it("marketplace native workflow mirror matches the bundled workflow", () => {
     const repoRoot = fs.existsSync(path.join(process.cwd(), "marketplace"))
       ? process.cwd()
@@ -167,6 +176,19 @@ describe("trellis template constants", () => {
     expect(block).toContain("main session only");
   });
 
+  it("workflow.md in_progress breadcrumb records optional review gates and final verification reachability", () => {
+    const block = inProgressBreadcrumb();
+    expect(block).toContain("optional review gates");
+    expect(block).toContain("trellis-merge-review");
+    expect(block).toContain("Review-gate contract: explicit-selection-v1");
+    expect(block).toContain("Optional review gates status: configured");
+    expect(block).toContain("trellis-check");
+    expect(block).toContain("merge if needed");
+    expect(block).toContain("build/test");
+    expect(block).toContain("trellis-code-architecture-review");
+    expect(block).toContain("does not by itself enable or block deep-review");
+  });
+
   it("[issue-237] workflow.md Phase 2 dispatch steps require prompt recursion guards", () => {
     expect(workflowMdTemplate).toContain("**Dispatch prompt guard**");
     expect(workflowMdTemplate).toContain(
@@ -207,6 +229,16 @@ describe("trellis template constants", () => {
       "Parent/child structure is not a dependency system",
     );
     expect(step).toContain("Do not start the parent unless");
+    expect(step).toContain("A.` / `B.` / `C.`");
+    expect(step).toContain("task-local review-gate 选择");
+    expect(step).toContain("Review-gate contract: explicit-selection-v1");
+    expect(step).toContain("Optional review gates status: pending");
+    expect(step).toContain("Optional review gates status: configured");
+    expect(step).toContain("legacy task");
+    expect(step).toContain("trellis-check");
+    expect(step).toContain("pre-development architecture guidance");
+    expect(step).toContain("trellis-code-architecture-review");
+    expect(step).toContain("不会隐式开启 `trellis-improve-codebase-architecture` deep-review");
   });
 
   it("workflow.md planning breadcrumb keeps requirement clarification before strategy decisions on Claude Code path", () => {
@@ -227,13 +259,30 @@ describe("trellis template constants", () => {
     expect(planning).toContain("branch vs worktree");
     expect(planning).toContain("./.claude/worktree");
     expect(planning).toContain("trellis-tdd");
+    expect(planning).toContain("A.` / `B.` / `C.`");
+    expect(planning).toContain("trellis-merge-review");
+    expect(planning).toContain("Review-gate contract: explicit-selection-v1");
+    expect(planning).toContain("Optional review gates status: pending");
+    expect(planning).toContain("Optional review gates status: configured");
+    expect(planning).toContain("Enabled optional review gates:");
+    expect(planning).toContain("Disabled optional review gates:");
+    expect(planning).toContain("pre-development architecture guidance");
+    expect(planning).toContain("trellis-code-architecture-review");
+    expect(planning).toContain("do NOT implicitly enable `trellis-improve-codebase-architecture` deep-review");
   });
 
-  it("workflow.md step 2.2 gives Claude Code an explicit review-gate order", () => {
+  it("workflow.md step 2.2 explains selected review gates and preserved order", () => {
     const step = stepSection("2.2");
+    expect(step).toContain("按任务策略运行显式选中的 review gate");
     expect(step).toContain("trellis-spec-review");
     expect(step).toContain("trellis-code-review");
     expect(step).toContain("trellis-code-architecture-review");
+    expect(step).toContain("trellis-improve-codebase-architecture");
+    expect(step).toContain("trellis-merge-review");
+    expect(step).toContain("Review-gate contract: explicit-selection-v1");
+    expect(step).toContain("Optional review gates status: configured");
+    expect(step).toContain("legacy task");
+    expect(step).toContain("任务策略无效");
     expect(step).toContain("Do not advance to the next gate until the previous gate passes");
     expect(step).toContain("the main agent fixes the blocking issues and re-runs the same gate");
     expect(step).toContain("more than 3 times in a row");
@@ -264,6 +313,7 @@ describe("getAllScripts", () => {
     expect(scripts.has("common/active_task.py")).toBe(true);
     expect(scripts.has("task.py")).toBe(true);
     expect(scripts.has("get_developer.py")).toBe(true);
+    expect(scripts.has("assert_trellis_enabled.py")).toBe(true);
   });
 
   it("has at least one entry", () => {
@@ -283,6 +333,7 @@ describe("getAllScripts", () => {
     expect(scripts.get("__init__.py")).toBe(scriptsInit);
     expect(scripts.get("common/__init__.py")).toBe(commonInit);
     expect(scripts.get("task.py")).toBe(taskScript);
+    expect(scripts.get("assert_trellis_enabled.py")).toBe(assertTrellisEnabled);
   });
 
   it("does not contain multi_agent entries", () => {

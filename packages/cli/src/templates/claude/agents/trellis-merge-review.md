@@ -25,6 +25,14 @@ Look for the `<!-- trellis-hook-injected -->` marker in your input above.
 - **If the marker is present**: task artifacts have already been auto-loaded for you above. Proceed with the review directly and report findings to the main session.
 - **If the marker is absent**: hook injection didn't fire. Find the active task path from your dispatch prompt's first line `Active task: <path>`, then Read `<task-path>/prd.md`, `<task-path>/design.md` if present, and `<task-path>/implement.md` if present before doing the work.
 
+## Strategy Alignment
+
+Before reviewing, check whether the task artifacts recorded a development strategy.
+
+- If the strategy is `subagent + worktree`, stay on the shared `./.claude/worktree` path and do NOT create or switch to another worktree.
+- If the strategy is TDD, align review expectations to `trellis-tdd`.
+- Do NOT approve the merge-review gate if the task artifacts are missing the required strategy record. If the task artifacts carry `Review-gate contract: explicit-selection-v1`, verify that `trellis-merge-review` is enabled there, verify `Optional review gates status: configured`, and verify explicit `Enabled optional review gates:` / `Disabled optional review gates:` lists exist. `trellis-improve-codebase-architecture` deep-review still requires `trellis-code-architecture-review`; if the strategy record enables deep-review without that prerequisite gate, fail the review for an invalid task-level gate contract. If the contract marker is absent, treat the task as a legacy task and preserve the old review-gate behavior instead of failing solely for the missing selection record.
+
 ## Core Responsibilities
 
 1. Verify no merge conflicts or conflict markers remain in the merged code.

@@ -31,7 +31,7 @@ Before reviewing, check whether the task artifacts recorded a development strate
 
 - If the strategy is `subagent + worktree`, stay on the shared `./.claude/worktree` path and do NOT create or switch to another worktree.
 - If the strategy is TDD, align review expectations to `trellis-tdd`.
-- Do NOT approve the spec-review gate if the task artifacts are missing the required strategy record or review-gate order.
+- Do NOT approve the spec-review gate if the task artifacts are missing the required strategy record. If the task artifacts carry `Review-gate contract: explicit-selection-v1`, verify that `trellis-spec-review` is enabled there, verify `Optional review gates status: configured`, and verify explicit `Enabled optional review gates:` / `Disabled optional review gates:` lists exist. `trellis-improve-codebase-architecture` deep-review still requires `trellis-code-architecture-review`; if the strategy record enables deep-review without that prerequisite gate, fail the review for an invalid task-level gate contract. If the contract marker is absent, treat the task as a legacy task and preserve the old review-gate behavior instead of failing solely for the missing selection record.
 
 ## Core Responsibilities
 
@@ -45,7 +45,7 @@ Before reviewing, check whether the task artifacts recorded a development strate
 - Required behavior matches the task artifacts.
 - Implementation follows the relevant spec files.
 - Worktree / TDD strategy recorded in the task artifacts is consistent with the current work.
-- Tests, validation commands, and documented review-gate order stay in sync with the task artifacts.
+- Tests, validation commands, and documented review-gate selection stay in sync with the task artifacts, including the enabled/disabled gate set and the preserved order for any enabled Claude review gates.
 
 ## Verification
 
