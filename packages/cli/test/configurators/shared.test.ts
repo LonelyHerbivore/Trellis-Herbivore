@@ -3,6 +3,8 @@ import {
   getPythonCommandForPlatform,
   replacePythonCommandLiterals,
   resolveAllAsSkillsNeutral,
+  resolveBundledSkills,
+  resolveCommands,
   resolvePlaceholders,
   resolvePlaceholdersNeutral,
   resolveSkillsNeutral,
@@ -514,6 +516,45 @@ describe("resolvePlaceholdersNeutral", () => {
 // ---------------------------------------------------------------------------
 
 describe("resolveSkillsNeutral / resolveAllAsSkillsNeutral", () => {
+  it("resolveCommands injects the trellis-switch guard", () => {
+    const commands = resolveCommands(claudeCtx);
+    const guard = `${getPythonCommandForPlatform()} ./.trellis/scripts/assert_trellis_enabled.py`;
+    expect(commands.length).toBeGreaterThan(0);
+    for (const command of commands) {
+      expect(command.content).toContain("## Trellis Switch Gate");
+      expect(command.content).toContain(guard);
+    }
+  });
+
+  it("resolveCommands keeps the command title before the trellis-switch guard", () => {
+    const continueCommand = resolveCommands(claudeCtx).find(
+      (command) => command.name === "continue",
+    );
+    const normalizedContent = continueCommand?.content.replace(/\r\n/g, "\n");
+    expect(normalizedContent?.startsWith("# Continue Current Task\n\n## Trellis Switch Gate")).toBe(
+      true,
+    );
+  });
+
+  it("resolveSkillsNeutral injects the trellis-switch guard", () => {
+    const skills = resolveSkillsNeutral(AI_TOOLS.codex.templateContext);
+    const guard = `${getPythonCommandForPlatform()} ./.trellis/scripts/assert_trellis_enabled.py`;
+    expect(skills.length).toBeGreaterThan(0);
+    for (const skill of skills) {
+      expect(skill.content).toContain("## Trellis Switch Gate");
+      expect(skill.content).toContain(guard);
+    }
+  });
+
+  it("resolveBundledSkills injects the trellis-switch guard into SKILL.md", () => {
+    const files = resolveBundledSkills(claudeCtx);
+    const metaSkill = files.find((file) => file.relativePath === "trellis-meta/SKILL.md");
+    expect(metaSkill?.content).toContain("## Trellis Switch Gate");
+    expect(metaSkill?.content).toContain(
+      `${getPythonCommandForPlatform()} ./.trellis/scripts/assert_trellis_enabled.py`,
+    );
+  });
+
   it("resolveSkillsNeutral produces byte-identical output for Codex and Gemini", () => {
     const codexSkills = resolveSkillsNeutral(AI_TOOLS.codex.templateContext);
     const geminiSkills = resolveSkillsNeutral(AI_TOOLS.gemini.templateContext);

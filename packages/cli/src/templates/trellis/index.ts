@@ -61,6 +61,7 @@ export const commonTrellisConfig = readTemplate(
 );
 export const commonSafeCommit = readTemplate("scripts/common/safe_commit.py");
 export const trellisSwitch = readTemplate("scripts/trellis_switch.py");
+export const assertTrellisEnabled = readTemplate("scripts/assert_trellis_enabled.py");
 
 // Python scripts - main
 export const getDeveloperScript = readTemplate("scripts/get_developer.py");
@@ -113,6 +114,7 @@ export function getAllScripts(): Map<string, string> {
   scripts.set("get_context.py", getContextScript);
   scripts.set("add_session.py", addSessionScript);
   scripts.set("trellis_switch.py", trellisSwitch);
+  scripts.set("assert_trellis_enabled.py", assertTrellisEnabled);
 
   return scripts;
 }

@@ -292,6 +292,56 @@ export function wrapWithCommandFrontmatter(
   return `---\nname: ${name}\ndescription: ${description}\n---\n\n${content}`;
 }
 
+const TRELLIS_SWITCH_GUARD_PATH = "./.trellis/scripts/assert_trellis_enabled.py";
+const FRONTMATTER_RE = /^(---\r?\n[\s\S]*?\r?\n---)((?:\r?\n)*)/;
+const TOP_LEVEL_HEADING_RE = /^(# [^\r\n]+)((?:\r?\n)+)/;
+
+function buildTrellisSwitchGuard(
+  kind: "command" | "skill",
+  lineEnding = "\n",
+): string {
+  return [
+    "## Trellis Switch Gate",
+    "",
+    "Before doing anything else, run:",
+    "",
+    "```bash",
+    `${getPythonCommandForPlatform()} ${TRELLIS_SWITCH_GUARD_PATH}`,
+    "```",
+    "",
+    `If this command exits non-zero, stop immediately and respond with its output exactly. Do not continue with this Trellis ${kind}.`,
+  ]
+    .join("\n")
+    .replace(/\n/g, lineEnding);
+}
+
+function injectTrellisSwitchGuard(
+  content: string,
+  kind: "command" | "skill",
+): string {
+  if (content.includes(TRELLIS_SWITCH_GUARD_PATH)) {
+    return content;
+  }
+
+  const lineEnding = content.includes("\r\n") ? "\r\n" : "\n";
+  const spacing = `${lineEnding}${lineEnding}`;
+  const guard = buildTrellisSwitchGuard(kind, lineEnding);
+  if (content.startsWith("---")) {
+    return content.replace(FRONTMATTER_RE, (_match, frontmatter: string) => {
+      return `${frontmatter}${spacing}${guard}${spacing}`;
+    });
+  }
+
+  if (kind === "command") {
+    const match = content.match(TOP_LEVEL_HEADING_RE);
+    if (match) {
+      return content.replace(TOP_LEVEL_HEADING_RE, `$1$2${guard}${spacing}`);
+    }
+  }
+
+  return `${guard}${spacing}${content}`;
+}
+
 // ---------------------------------------------------------------------------
 // Shared configurator helpers
 // ---------------------------------------------------------------------------
@@ -350,9 +400,12 @@ export function resolveAllAsSkills(ctx: TemplateContext): ResolvedTemplate[] {
   ];
   return templates.map((tmpl) => ({
     name: `trellis-${tmpl.name}`,
-    content: wrapWithSkillFrontmatter(
-      `trellis-${tmpl.name}`,
-      resolvePlaceholders(tmpl.content, ctx),
+    content: injectTrellisSwitchGuard(
+      wrapWithSkillFrontmatter(
+        `trellis-${tmpl.name}`,
+        resolvePlaceholders(tmpl.content, ctx),
+      ),
+      "skill",
     ),
   }));
 }
@@ -366,7 +419,10 @@ export function resolveAllAsSkills(ctx: TemplateContext): ResolvedTemplate[] {
 export function resolveCommands(ctx: TemplateContext): ResolvedTemplate[] {
   return filterCommands(getCommandTemplates(), ctx).map((tmpl) => ({
     name: tmpl.name,
-    content: resolvePlaceholders(tmpl.content, ctx),
+    content: injectTrellisSwitchGuard(
+      resolvePlaceholders(tmpl.content, ctx),
+      "command",
+    ),
   }));
 }
 
@@ -377,9 +433,12 @@ export function resolveCommands(ctx: TemplateContext): ResolvedTemplate[] {
 export function resolveSkills(ctx: TemplateContext): ResolvedTemplate[] {
   return getSkillTemplates().map((tmpl) => ({
     name: `trellis-${tmpl.name}`,
-    content: wrapWithSkillFrontmatter(
-      `trellis-${tmpl.name}`,
-      resolvePlaceholders(tmpl.content, ctx),
+    content: injectTrellisSwitchGuard(
+      wrapWithSkillFrontmatter(
+        `trellis-${tmpl.name}`,
+        resolvePlaceholders(tmpl.content, ctx),
+      ),
+      "skill",
     ),
   }));
 }
@@ -394,9 +453,12 @@ export function resolveSkills(ctx: TemplateContext): ResolvedTemplate[] {
 export function resolveSkillsNeutral(ctx: TemplateContext): ResolvedTemplate[] {
   return getSkillTemplates().map((tmpl) => ({
     name: `trellis-${tmpl.name}`,
-    content: wrapWithSkillFrontmatter(
-      `trellis-${tmpl.name}`,
-      resolvePlaceholdersNeutral(tmpl.content, ctx),
+    content: injectTrellisSwitchGuard(
+      wrapWithSkillFrontmatter(
+        `trellis-${tmpl.name}`,
+        resolvePlaceholdersNeutral(tmpl.content, ctx),
+      ),
+      "skill",
     ),
   }));
 }
@@ -417,9 +479,12 @@ export function resolveAllAsSkillsNeutral(
   ];
   return templates.map((tmpl) => ({
     name: `trellis-${tmpl.name}`,
-    content: wrapWithSkillFrontmatter(
-      `trellis-${tmpl.name}`,
-      resolvePlaceholdersNeutral(tmpl.content, ctx),
+    content: injectTrellisSwitchGuard(
+      wrapWithSkillFrontmatter(
+        `trellis-${tmpl.name}`,
+        resolvePlaceholdersNeutral(tmpl.content, ctx),
+      ),
+      "skill",
     ),
   }));
 }
@@ -449,9 +514,12 @@ export function resolveCodexTrellisStartSkill(
   if (!startTemplate) return null;
   return {
     name: "trellis-start",
-    content: wrapWithSkillFrontmatter(
-      "trellis-start",
-      resolvePlaceholdersNeutral(startTemplate.content, ctx),
+    content: injectTrellisSwitchGuard(
+      wrapWithSkillFrontmatter(
+        "trellis-start",
+        resolvePlaceholdersNeutral(startTemplate.content, ctx),
+      ),
+      "skill",
     ),
   };
 }
@@ -469,7 +537,10 @@ export function resolveBundledSkills(
   return getBundledSkillTemplates().flatMap((skill) =>
     skill.files.map((file) => ({
       relativePath: `${skill.name}/${file.relativePath}`,
-      content: resolvePlaceholders(file.content, ctx),
+      content:
+        file.relativePath === "SKILL.md"
+          ? injectTrellisSwitchGuard(resolvePlaceholders(file.content, ctx), "skill")
+          : resolvePlaceholders(file.content, ctx),
     })),
   );
 }
