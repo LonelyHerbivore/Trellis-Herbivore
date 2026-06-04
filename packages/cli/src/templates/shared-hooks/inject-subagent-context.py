@@ -49,6 +49,8 @@ if sys.platform.startswith("win"):
 DIR_WORKFLOW = ".trellis"
 DIR_SPEC = "spec"
 FILE_TASK_JSON = "task.json"
+WORKTREE_PARENT_DIR = ".claude"
+WORKTREE_ROOT_DIR = "trellis-worktrees"
 
 # =============================================================================
 # Subagent Constants (change here to rename subagent types)
@@ -77,6 +79,23 @@ def find_repo_root(start_path: str) -> str | None:
             return str(current)
         current = current.parent
     return None
+
+
+def _infer_worktree_task(repo_root: str) -> str | None:
+    root = Path(repo_root).resolve()
+    try:
+        if root.parent.name != WORKTREE_ROOT_DIR:
+            return None
+        if root.parent.parent.name != WORKTREE_PARENT_DIR:
+            return None
+    except Exception:
+        return None
+
+    task_dir_name = root.name
+    task_dir = root / DIR_WORKFLOW / "tasks" / task_dir_name
+    if not task_dir.is_dir():
+        return None
+    return f".trellis/tasks/{task_dir_name}"
 
 
 def _detect_platform(input_data: dict) -> str | None:
@@ -121,14 +140,14 @@ def get_current_task(repo_root: str, input_data: dict) -> str | None:
     try:
         from common.active_task import resolve_active_task  # type: ignore[import-not-found]
     except Exception:
-        return None
+        return _infer_worktree_task(repo_root)
 
     active = resolve_active_task(
         Path(repo_root),
         input_data,
         platform=_detect_platform(input_data),
     )
-    return active.task_path
+    return active.task_path or _infer_worktree_task(repo_root)
 
 
 def read_file_content(base_path: str, file_path: str) -> str | None:

@@ -150,7 +150,7 @@
 如果选择 `subagent + worktree`，本分支约定所有代码开发子代理固定使用同一个路径：
 
 ```text
-./.claude/worktree
+./.claude/trellis-worktrees/<task-dir-name>
 ```
 
 这样可以避免多个 worktree 上重复实现同一个任务，浪费上下文和 token。

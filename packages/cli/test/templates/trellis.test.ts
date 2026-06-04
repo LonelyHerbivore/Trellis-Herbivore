@@ -257,7 +257,7 @@ describe("trellis template constants", () => {
     const planning = workflowStateBreadcrumb("planning");
     expect(planning).toContain("development mode");
     expect(planning).toContain("branch vs worktree");
-    expect(planning).toContain("./.claude/worktree");
+    expect(planning).toContain("./.claude/trellis-worktrees/<task-dir-name>");
     expect(planning).toContain("trellis-tdd");
     expect(planning).toContain("A.` / `B.` / `C.`");
     expect(planning).toContain("trellis-merge-review");

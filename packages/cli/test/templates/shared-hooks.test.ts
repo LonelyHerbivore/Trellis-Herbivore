@@ -1,4 +1,8 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { execFileSync, spawnSync } from "node:child_process";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
 import {
   SHARED_HOOKS_BY_PLATFORM,
   getSharedHookScripts,
@@ -12,6 +16,102 @@ const ALL_HOOK_FILES = [
   "inject-workflow-state.py",
   "inject-subagent-context.py",
 ] as const;
+
+const TEMPLATE_SCRIPTS = path.resolve(
+  __dirname,
+  "../../src/templates/trellis/scripts",
+);
+const PYTHON = process.platform === "win32" ? "python" : "python3";
+
+function hasPython(): boolean {
+  try {
+    execFileSync(PYTHON, ["--version"], { stdio: "ignore" });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function writeTaskArtifacts(repoRoot: string, taskName: string, prd: string): void {
+  const taskDir = path.join(repoRoot, ".trellis", "tasks", taskName);
+  fs.mkdirSync(path.join(taskDir, "research"), { recursive: true });
+  fs.writeFileSync(
+    path.join(taskDir, "task.json"),
+    JSON.stringify({
+      id: taskName,
+      name: taskName,
+      title: taskName,
+      status: "in_progress",
+      priority: "P2",
+      createdAt: "2026-06-04",
+      assignee: "test",
+      creator: "test",
+      subtasks: [],
+      children: [],
+      relatedFiles: [],
+      meta: {},
+    }) + "\n",
+  );
+  fs.writeFileSync(path.join(taskDir, "prd.md"), prd);
+  fs.writeFileSync(path.join(taskDir, "design.md"), "# design\n");
+  fs.writeFileSync(path.join(taskDir, "implement.md"), "# implement\n");
+  fs.writeFileSync(
+    path.join(taskDir, "implement.jsonl"),
+    '{"file":".trellis/spec/guides/index.md","reason":"test"}\n',
+  );
+  fs.writeFileSync(
+    path.join(taskDir, "check.jsonl"),
+    '{"file":".trellis/spec/guides/index.md","reason":"test"}\n',
+  );
+  fs.writeFileSync(path.join(taskDir, "research", "note.md"), "research\n");
+}
+
+function setupMainRepo(repoRoot: string, taskName: string, prd: string): void {
+  fs.mkdirSync(repoRoot, { recursive: true });
+  spawnSync("git", ["init", "-q", "-b", "main"], {
+    cwd: repoRoot,
+    encoding: "utf-8",
+  });
+  fs.mkdirSync(path.join(repoRoot, ".trellis"), { recursive: true });
+  fs.cpSync(TEMPLATE_SCRIPTS, path.join(repoRoot, ".trellis", "scripts"), {
+    recursive: true,
+  });
+  fs.mkdirSync(path.join(repoRoot, ".trellis", "spec", "guides"), {
+    recursive: true,
+  });
+  fs.writeFileSync(path.join(repoRoot, ".trellis", "workflow.md"), "# Workflow\n");
+  fs.writeFileSync(path.join(repoRoot, ".trellis", "config.yaml"), "session_auto_commit: false\n");
+  fs.writeFileSync(path.join(repoRoot, ".trellis", ".gitignore"), ".runtime/\n");
+  fs.writeFileSync(path.join(repoRoot, ".trellis", "spec", "guides", "index.md"), "# Guides\n");
+  writeTaskArtifacts(repoRoot, taskName, prd);
+}
+
+function runSessionStart(worktreeRoot: string): string {
+  const sessionStart = getSharedHookScripts().find((h) => h.name === "session-start.py");
+  if (!sessionStart) {
+    throw new Error("session-start.py template missing");
+  }
+  const scriptDir = fs.mkdtempSync(path.join(os.tmpdir(), "trellis-session-start-"));
+  const scriptPath = path.join(scriptDir, "session-start.py");
+  fs.writeFileSync(scriptPath, sessionStart.content);
+  try {
+    const result = spawnSync(PYTHON, [scriptPath], {
+      cwd: worktreeRoot,
+      encoding: "utf-8",
+      env: {
+        ...process.env,
+        CLAUDE_PROJECT_DIR: worktreeRoot,
+      },
+      input: JSON.stringify({ cwd: worktreeRoot }),
+    });
+    if (result.status !== 0) {
+      throw new Error(result.stderr || result.stdout || "session-start failed");
+    }
+    return result.stdout;
+  } finally {
+    fs.rmSync(scriptDir, { recursive: true, force: true });
+  }
+}
 
 describe("shared-hooks capability table", () => {
   it("every capability-table entry names a real shared-hook file", () => {
@@ -134,6 +234,8 @@ describe("shared-hooks capability table", () => {
     expect(hooks.get("inject-workflow-state.py")).toContain("trellis-switch.json");
     expect(hooks.get("inject-subagent-context.py")).toContain("_read_trellis_switch_enabled");
     expect(hooks.get("inject-subagent-context.py")).toContain("trellis-switch.json");
+    expect(hooks.get("inject-subagent-context.py")).toContain("trellis-worktrees");
+    expect(hooks.get("inject-subagent-context.py")).toContain("_infer_worktree_task");
   });
 
   it("shared session-start.py injects compact task artifact guidance", () => {
@@ -147,7 +249,90 @@ describe("shared-hooks capability table", () => {
     expect(content).toContain("jsonl entries -> `prd.md`");
     expect(content).toContain("Lightweight task can request start review with PRD-only");
     expect(content).toContain("complex task must add");
+    expect(content).toContain("trellis-worktrees");
+    expect(content).toContain("<worktree-sync>");
     expect(content).not.toContain("Status: READY");
     expect(content).not.toContain("<workflow>");
+  });
+});
+
+describe.skipIf(!hasPython())("shared session-start worktree bootstrap", () => {
+  let tmpDir: string;
+  let repoRoot: string;
+  let worktreeRoot: string;
+  const taskName = "06-04-worktree-bootstrap";
+
+  beforeEach(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "trellis-shared-hooks-"));
+    repoRoot = path.join(tmpDir, "repo");
+    worktreeRoot = path.join(
+      repoRoot,
+      ".claude",
+      "trellis-worktrees",
+      taskName,
+    );
+  });
+
+  afterEach(() => {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("bootstraps runtime bundle and planning snapshot into a Trellis-managed worktree", () => {
+    setupMainRepo(repoRoot, taskName, "main planning\n");
+    fs.mkdirSync(worktreeRoot, { recursive: true });
+
+    const raw = runSessionStart(worktreeRoot);
+    const parsed = JSON.parse(raw) as {
+      hookSpecificOutput?: { additionalContext?: string };
+    };
+    const context = parsed.hookSpecificOutput?.additionalContext ?? "";
+
+    expect(context).toContain("<worktree-sync>");
+    expect(context).toContain("Bootstrapped runtime bundle from main workspace");
+    expect(context).toContain("Bootstrapped current task planning snapshot from main workspace");
+    expect(context).toContain(`Current task: .trellis/tasks/${taskName}; status=in_progress.`);
+    expect(
+      fs.existsSync(path.join(worktreeRoot, ".trellis", "scripts", "task.py")),
+    ).toBe(true);
+    expect(
+      fs.readFileSync(
+        path.join(worktreeRoot, ".trellis", "tasks", taskName, "prd.md"),
+        "utf-8",
+      ),
+    ).toContain("main planning");
+    expect(
+      fs.existsSync(
+        path.join(worktreeRoot, ".trellis", "tasks", taskName, "research", "note.md"),
+      ),
+    ).toBe(true);
+    expect(fs.existsSync(path.join(worktreeRoot, ".trellis", ".runtime"))).toBe(false);
+  });
+
+  it("reports planning drift and asks for explicit main-workspace overwrite", () => {
+    setupMainRepo(repoRoot, taskName, "main planning\n");
+    fs.mkdirSync(path.join(worktreeRoot, ".trellis", "tasks", taskName), {
+      recursive: true,
+    });
+    fs.writeFileSync(
+      path.join(worktreeRoot, ".trellis", "tasks", taskName, "task.json"),
+      JSON.stringify({ title: taskName, status: "in_progress" }) + "\n",
+    );
+    fs.writeFileSync(
+      path.join(worktreeRoot, ".trellis", "tasks", taskName, "prd.md"),
+      "worktree planning\n",
+    );
+
+    const raw = runSessionStart(worktreeRoot);
+    const parsed = JSON.parse(raw) as {
+      hookSpecificOutput?: { additionalContext?: string };
+    };
+    const context = parsed.hookSpecificOutput?.additionalContext ?? "";
+
+    expect(context).toContain("Planning drift detected between main workspace and worktree");
+    expect(context).toContain(
+      "已检测到主工作区的某个任务的prd.md/planning与worktree不一致，是否执行 主工作区覆盖worktree 的操作？",
+    );
+    expect(context).toContain("`.backup-`");
+    expect(context).toContain("inherit the original task's planning context");
   });
 });

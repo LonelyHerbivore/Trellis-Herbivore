@@ -212,6 +212,7 @@ describe("shouldExcludeFromBackup", () => {
   // Snapshotting them on every update would duplicate gigabytes; they must
   // be excluded regardless of which platform put them there.
   it.each([
+    ".claude/trellis-worktrees/feature-x/src/main.ts",
     ".claude/worktrees/feature-x/src/main.ts",
     ".cursor/worktrees/bugfix-1/README.md",
     ".gemini/worktrees/exp/file.txt",
@@ -272,6 +273,7 @@ describe("shouldExcludeFromBackup", () => {
   // full project copies (observed in the field: stack-overflow crash on
   // `trellis update --migrate`, late April 2026).
   it.each([
+    ".claude\\trellis-worktrees\\feat-x\\src\\main.ts",
     ".claude\\worktrees\\feat-x\\src\\main.ts",
     ".trellis\\tasks\\04-17-foo\\prd.md",
     ".trellis\\workspace\\dev\\journal-1.md",
