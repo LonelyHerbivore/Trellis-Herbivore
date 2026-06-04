@@ -40,6 +40,7 @@ import { replacePythonCommandLiterals } from "../../src/configurators/shared.js"
 
 // A managed template file that update always handles (Python script)
 const MANAGED_FILE = `${PATHS.SCRIPTS}/get_context.py`;
+const CLAUDE_IMPLEMENT_AGENT = ".claude/agents/trellis-implement.md";
 
 /** Remove a key from a hash object (avoids eslint no-dynamic-delete) */
 function removeHashEntry(
@@ -303,7 +304,27 @@ describe("update() integration", () => {
     expect(fs.readFileSync(targetFull, "utf-8")).toBe(templateContent);
   });
 
-  it("#4b auto-updates legacy untracked AGENTS.md and preserves outside content", async () => {
+  it("#4b auto-updates Claude implement agent when the installed template is older but unmodified", async () => {
+    await init({ yes: true, force: true, claude: true });
+
+    const targetFull = projectFile(CLAUDE_IMPLEMENT_AGENT);
+    const templateContent = fs.readFileSync(targetFull, "utf-8");
+    const oldContent = templateContent.replace(
+      "permissionMode: acceptEdits\n",
+      "",
+    );
+    fs.writeFileSync(targetFull, oldContent);
+
+    const hashes = readHashesV2(hashFilePath());
+    hashes[CLAUDE_IMPLEMENT_AGENT] = computeHash(oldContent);
+    writeHashesV2(hashFilePath(), hashes);
+
+    await update({});
+
+    expect(fs.readFileSync(targetFull, "utf-8")).toBe(templateContent);
+  });
+
+  it("#4c auto-updates legacy untracked AGENTS.md and preserves outside content", async () => {
     await setupProject();
 
     const targetRelative = FILE_NAMES.AGENTS;

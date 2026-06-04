@@ -13,11 +13,9 @@ import {
   commonCliAdapter,
   getDeveloperScript,
   initDeveloperScript,
-  trellisSwitch,
   taskScript,
   getContextScript,
   addSessionScript,
-  assertTrellisEnabled,
   workflowMdTemplate,
   gitignoreTemplate,
   getAllScripts,
@@ -111,13 +109,6 @@ describe("trellis template constants", () => {
     expect(workflowMdTemplate).toContain("#");
   });
 
-  it("trellisSwitch hides Claude Trellis surfaces when disabled", () => {
-    expect(trellisSwitch).toContain('TRELLIS_SWITCH_COMMAND = "trellis-switch.md"');
-    expect(trellisSwitch).toContain('DISABLED_SUFFIX = ".disabled"');
-    expect(trellisSwitch).toContain('skills_dir.glob("trellis-*")');
-    expect(trellisSwitch).toContain('disabled_command.rename(enabled_command)');
-  });
-
   it("marketplace native workflow mirror matches the bundled workflow", () => {
     const repoRoot = fs.existsSync(path.join(process.cwd(), "marketplace"))
       ? process.cwd()
@@ -202,6 +193,12 @@ describe("trellis template constants", () => {
     );
     expect(workflowMdTemplate).toContain(
       "not spawn another `trellis-check` / `trellis-implement`",
+    );
+    expect(workflowMdTemplate).toContain(
+      "`trellis-implement` carries `permissionMode: acceptEdits`",
+    );
+    expect(workflowMdTemplate).toContain(
+      "host-constrained mode such as `auto`",
     );
   });
 
@@ -313,7 +310,6 @@ describe("getAllScripts", () => {
     expect(scripts.has("common/active_task.py")).toBe(true);
     expect(scripts.has("task.py")).toBe(true);
     expect(scripts.has("get_developer.py")).toBe(true);
-    expect(scripts.has("assert_trellis_enabled.py")).toBe(true);
   });
 
   it("has at least one entry", () => {
@@ -333,7 +329,6 @@ describe("getAllScripts", () => {
     expect(scripts.get("__init__.py")).toBe(scriptsInit);
     expect(scripts.get("common/__init__.py")).toBe(commonInit);
     expect(scripts.get("task.py")).toBe(taskScript);
-    expect(scripts.get("assert_trellis_enabled.py")).toBe(assertTrellisEnabled);
   });
 
   it("does not contain multi_agent entries", () => {

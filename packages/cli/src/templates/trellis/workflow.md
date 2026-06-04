@@ -500,6 +500,7 @@ python3 ./.trellis/scripts/task.py start <task-dir>
 - **Agent type**: `trellis-implement`
 - **Task description**: Implement the reviewed task artifacts, consulting materials under `{TASK_DIR}/research/`; finish by running project lint and type-check
 - **Dispatch prompt guard**: Tell the spawned agent it is already the `trellis-implement` sub-agent and must implement directly, not spawn another `trellis-implement` / `trellis-check`.
+- **Claude Code permission note**: `trellis-implement` carries `permissionMode: acceptEdits` so the normal foreground implement path can edit without per-write confirmation. If the parent Claude session runs under a host-constrained mode such as `auto`, actual permission behavior still follows the host.
 
 平台 hook / plugin 会自动处理：The platform hook/plugin auto-handles:
 - 读取 `implement.jsonl`，把引用的 spec / research 文件注入子代理 prompt。Reads `implement.jsonl`, injecting referenced spec / research files into the sub-agent prompt.

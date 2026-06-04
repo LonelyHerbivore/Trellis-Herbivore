@@ -117,6 +117,20 @@ describe("getAllAgents", () => {
     }
   });
 
+  it("trellis implement agent opts into acceptEdits without widening other Claude agents", () => {
+    const agents = new Map(
+      getAllAgents().map((agent) => [agent.name, agent.content]),
+    );
+
+    const implementContent = agents.get("trellis-implement");
+    const checkContent = agents.get("trellis-check");
+
+    expect(implementContent).toBeDefined();
+    expect(implementContent).toContain("permissionMode: acceptEdits");
+    expect(checkContent).toBeDefined();
+    expect(checkContent).not.toContain("permissionMode: acceptEdits");
+  });
+
   it("trellis implement and check agents preserve explicit review-gate contract semantics", () => {
     const agents = new Map(
       getAllAgents().map((agent) => [agent.name, agent.content]),
