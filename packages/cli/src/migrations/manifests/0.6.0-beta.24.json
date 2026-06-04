@@ -1,0 +1,9 @@
+{
+  "version": "0.6.0-beta.24",
+  "description": "Beta patch: unify the npm latest dist-tag policy so release preflight checks, upgrade defaults, and published metadata all follow the same latest-only contract.",
+  "breaking": false,
+  "recommendMigrate": false,
+  "changelog": "**Enhancements:**\n- fix(release): publish preflight now enforces a latest-only npm dist-tag policy so release checks and registry verification agree on the same contract.\n- fix(upgrade): CLI upgrade behavior now aligns with the published latest-only strategy instead of relying on divergent beta/rc defaults.\n\n**Notes:**\n- release-related tests and fork specs were updated together so the release pipeline and user-facing upgrade path stay in sync.",
+  "migrations": [],
+  "notes": "Run `npm install -g trellis-hgl@latest` (or install this exact version) and `trellis update` to pick up the release-policy and upgrade-path fixes. No file migration is required."
+}

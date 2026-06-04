@@ -1,0 +1,9 @@
+{
+  "version": "0.6.0-beta.26",
+  "description": "Beta patch: add the Claude-side trellis-switch execution gate so disabled Trellis commands and skills stop early, hide Claude surfaces consistently, and recover cleanly when re-enabled.",
+  "breaking": false,
+  "recommendMigrate": false,
+  "changelog": "**Enhancements:**\n- feat(claude): generated Claude commands, skills, and bundled skills now include a trellis-switch guard that stops immediately when Trellis has been disabled for the current developer.\n- feat(claude): `trellis_switch.py` now hides or restores Claude command and skill surfaces together, and the generated script set now includes `assert_trellis_enabled.py` for the guard path.\n- test(claude): configurator coverage now verifies guard injection and command heading placement so the disabled-state behavior stays stable across updates.\n\n**Notes:**\n- This is a template/content refresh for existing Trellis projects; update sync handles the new guard script and prompt content.",
+  "migrations": [],
+  "notes": "Run `trellis update` to receive the new Claude trellis-switch guard script and synchronized command/skill gating. No manual file migration is required."
+}
