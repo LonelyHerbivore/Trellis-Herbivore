@@ -3,7 +3,7 @@
 """
 Multi-Platform Sub-Agent Context Injection Hook
 
-Injects task-specific context when sub-agents (implement, check, research) are spawned.
+Injects task-specific context when sub-agents (implement, check, review, research) are spawned.
 
 Core Design Philosophy:
 - Hook is responsible for injecting all context, subagent works autonomously with complete info
@@ -57,11 +57,25 @@ FILE_TASK_JSON = "task.json"
 AGENT_IMPLEMENT = "trellis-implement"
 AGENT_CHECK = "trellis-check"
 AGENT_RESEARCH = "trellis-research"
+AGENT_SPEC_REVIEW = "trellis-spec-review"
+AGENT_CODE_REVIEW = "trellis-code-review"
+AGENT_CODE_ARCHITECTURE_REVIEW = "trellis-code-architecture-review"
+AGENT_MERGE_REVIEW = "trellis-merge-review"
+
+CLAUDE_SHARED_WORKTREE_MARKER = "/.trellis/trellis-worktrees/"
+
+AGENTS_REVIEW = (
+    AGENT_SPEC_REVIEW,
+    AGENT_CODE_REVIEW,
+    AGENT_CODE_ARCHITECTURE_REVIEW,
+    AGENT_MERGE_REVIEW,
+)
+AGENTS_CHECK_CONTEXT = (AGENT_CHECK, *AGENTS_REVIEW)
 
 # Agents that require a task directory
-AGENTS_REQUIRE_TASK = (AGENT_IMPLEMENT, AGENT_CHECK)
+AGENTS_REQUIRE_TASK = (AGENT_IMPLEMENT, *AGENTS_CHECK_CONTEXT)
 # All supported agents
-AGENTS_ALL = (AGENT_IMPLEMENT, AGENT_CHECK, AGENT_RESEARCH)
+AGENTS_ALL = (*AGENTS_REQUIRE_TASK, AGENT_RESEARCH)
 
 
 def find_repo_root(start_path: str) -> str | None:
@@ -77,6 +91,66 @@ def find_repo_root(start_path: str) -> str | None:
             return str(current)
         current = current.parent
     return None
+
+
+def _candidate_scripts_dirs(repo_root: Path) -> list[Path]:
+    candidates = [repo_root / DIR_WORKFLOW / "scripts"]
+    try:
+        if repo_root.parent.name == "trellis-worktrees" and repo_root.parent.parent.name == DIR_WORKFLOW:
+            candidates.insert(0, repo_root.parent.parent.parent / DIR_WORKFLOW / "scripts")
+    except Exception:
+        pass
+    return candidates
+
+
+def _load_worktree_sync(repo_root: str):
+    repo_path = Path(repo_root).resolve()
+    for scripts_dir in _candidate_scripts_dirs(repo_path):
+        if str(scripts_dir) not in sys.path:
+            sys.path.insert(0, str(scripts_dir))
+        try:
+            from common import worktree_sync  # type: ignore[import-not-found]
+            return worktree_sync
+        except Exception:
+            continue
+    return None
+
+
+def _infer_worktree_task(repo_root: str) -> str | None:
+    worktree_sync = _load_worktree_sync(repo_root)
+    if worktree_sync is None:
+        return None
+    try:
+        return worktree_sync.infer_managed_worktree_task(Path(repo_root).resolve())
+    except Exception:
+        return None
+
+
+def ensure_shared_worktree_bootstrap(repo_root: str, task_dir: str | None) -> None:
+    if not task_dir:
+        return
+
+    worktree_sync = _load_worktree_sync(repo_root)
+    if worktree_sync is None:
+        return
+
+    task_dir_name = Path(task_dir).name
+    if not task_dir_name:
+        return
+
+    resolved = worktree_sync.resolve_shared_worktree_roots(
+        Path(repo_root).resolve(),
+        task_dir_name,
+    )
+    if not resolved:
+        return
+
+    main_root, worktree_root = resolved
+    worktree_sync.sync_runtime_bundle(main_root, worktree_root)
+
+    target_task_dir = worktree_sync.task_dir(worktree_root, task_dir_name)
+    if not worktree_sync.has_any_task_artifact(target_task_dir):
+        worktree_sync.sync_task_snapshot(main_root, worktree_root, task_dir_name)
 
 
 def _detect_platform(input_data: dict) -> str | None:
@@ -121,14 +195,14 @@ def get_current_task(repo_root: str, input_data: dict) -> str | None:
     try:
         from common.active_task import resolve_active_task  # type: ignore[import-not-found]
     except Exception:
-        return None
+        return _infer_worktree_task(repo_root)
 
     active = resolve_active_task(
         Path(repo_root),
         input_data,
         platform=_detect_platform(input_data),
     )
-    return active.task_path
+    return active.task_path or _infer_worktree_task(repo_root)
 
 
 def read_file_content(base_path: str, file_path: str) -> str | None:
@@ -461,6 +535,42 @@ Finish checklist and requirements:
 
 
 
+def build_review_prompt(original_prompt: str, context: str) -> str:
+    """Build complete prompt for read-only review gates."""
+    return f"""<!-- trellis-hook-injected -->
+# Review Gate Task
+
+You are a read-only Trellis review gate.
+
+## Your Context
+
+All the requirements, design constraints, and review specs you need:
+
+{context}
+
+---
+
+## Your Task
+
+{original_prompt}
+
+---
+
+## Workflow
+
+1. **Review changes** - Run `git diff --name-only` and `git diff` to inspect the change set
+2. **Verify task artifacts** - Check `prd.md`, `design.md` when present, and `implement.md` when present
+3. **Review against specs** - Check the relevant review criteria item by item
+4. **Report gate result** - Return PASS / FAIL, blocking issues, and next actions
+
+## Important Constraints
+
+- Read-only gate: do NOT modify code directly
+- Do NOT spawn another review, implement, or check sub-agent
+- Verify all acceptance criteria in `prd.md`
+- Verify design and execution-plan constraints when those files are present"""
+
+
 def get_research_context(repo_root: str, task_dir: str | None) -> str:
     """
     Context for Research Agent — project structure overview for spec directories.
@@ -684,6 +794,233 @@ def _parse_hook_input(input_data: dict) -> tuple[str, str, dict]:
     return "", "", tool_input
 
 
+def _read_trellis_switch_enabled() -> bool:
+    try:
+        cwd = Path.cwd()
+        while cwd != cwd.parent:
+            trellis_dir = cwd / ".trellis"
+            if trellis_dir.is_dir():
+                dev_file = trellis_dir / ".developer"
+                if dev_file.is_file():
+                    for line in dev_file.read_text(encoding="utf-8").splitlines():
+                        if line.startswith("name="):
+                            name = line.split("=", 1)[1].strip()
+                            switch = trellis_dir / "workspace" / name / "trellis-switch.json"
+                            if switch.is_file():
+                                return json.loads(switch.read_text(encoding="utf-8")).get("enabled", True)
+                return True
+            cwd = cwd.parent
+    except Exception:
+        pass
+    return True
+
+
+def _normalize_hook_text(value: Any) -> str:
+    if isinstance(value, str):
+        return value.replace("\\", "/").lower()
+    try:
+        return json.dumps(value, ensure_ascii=False).replace("\\", "/").lower()
+    except Exception:
+        return ""
+
+
+def is_claude_code_dev_agent(subagent_type: str) -> bool:
+    return subagent_type in (AGENT_IMPLEMENT, *AGENTS_CHECK_CONTEXT)
+
+
+def _extract_strategy_field(text: str, *labels: str) -> str | None:
+    for raw_line in text.splitlines():
+        line = raw_line.strip()
+        if line.startswith(("-", "*")):
+            line = line[1:].strip()
+        lowered = line.lower()
+        for label in labels:
+            normalized_label = label.lower()
+            if lowered.startswith(normalized_label):
+                return line[len(label):].strip()
+    return None
+
+
+def _extract_strategy_block_choice(text: str, block_key: str) -> str | None:
+    current_block: str | None = None
+    for raw_line in text.splitlines():
+        line = raw_line.strip()
+        lowered = line.lower()
+        if lowered.startswith("###"):
+            if "a." in lowered and ("开发模式" in line or "development mode" in lowered):
+                current_block = "mode"
+            elif "b." in lowered and ("分支" in line or "branch" in lowered or "worktree" in lowered):
+                current_block = "branch"
+            else:
+                current_block = None
+            continue
+        if current_block != block_key:
+            continue
+        if line.startswith(("-", "*")):
+            line = line[1:].strip()
+            lowered = line.lower()
+        choice = _extract_strategy_field(line, "选择：", "choice:")
+        if choice is not None:
+            return choice
+    return None
+
+
+def _parse_shared_worktree_strategy(text: str | None) -> bool | None:
+    if not text:
+        return None
+    development_mode = _extract_strategy_field(text, "开发模式：", "development mode:")
+    branch_strategy = _extract_strategy_field(text, "分支策略：", "branch strategy:")
+    if development_mode is None and branch_strategy is None:
+        development_mode = _extract_strategy_block_choice(text, "mode")
+        branch_strategy = _extract_strategy_block_choice(text, "branch")
+    if development_mode is None and branch_strategy is None:
+        return None
+    return "subagent" in _normalize_hook_text(development_mode) and "worktree" in _normalize_hook_text(branch_strategy)
+
+
+def _task_strategy_uses_shared_worktree(repo_root: str, task_dir: str | None) -> bool:
+    if not task_dir:
+        return False
+    implement_plan = read_file_content(repo_root, f"{task_dir}/implement.md")
+    implement_strategy = _parse_shared_worktree_strategy(implement_plan)
+    if implement_strategy is not None:
+        return implement_strategy
+    prd = read_file_content(repo_root, f"{task_dir}/prd.md")
+    prd_strategy = _parse_shared_worktree_strategy(prd)
+    return bool(prd_strategy)
+
+
+def _path_uses_shared_worktree(path_value: Any) -> bool:
+    return CLAUDE_SHARED_WORKTREE_MARKER in _normalize_hook_text(path_value)
+
+
+def _looks_like_path_key(key: str | None) -> bool:
+    if not key:
+        return False
+    lowered = key.lower()
+    if lowered in {
+        "cwd",
+        "path",
+        "paths",
+        "file",
+        "files",
+        "file_path",
+        "filepath",
+        "dir",
+        "directory",
+        "target",
+        "targets",
+        "target_path",
+        "worktree",
+        "worktree_path",
+        "repo_root",
+        "workspace_root",
+        "root",
+    }:
+        return True
+    return lowered.endswith(("_path", "_paths", "_file", "_files", "_dir", "_root"))
+
+
+def _extract_shared_worktree_task_name(path_value: Any) -> str | None:
+    normalized = _normalize_hook_text(path_value)
+    if CLAUDE_SHARED_WORKTREE_MARKER not in normalized:
+        return None
+    suffix = normalized.split(CLAUDE_SHARED_WORKTREE_MARKER, 1)[1]
+    task_name = suffix.split("/", 1)[0].strip()
+    return task_name or None
+
+
+def _tool_input_targets_shared_worktree(value: Any, key: str | None = None) -> bool:
+    if isinstance(value, dict):
+        for nested_key, nested_value in value.items():
+            if _tool_input_targets_shared_worktree(nested_value, str(nested_key)):
+                return True
+        return False
+    if isinstance(value, list):
+        for item in value:
+            if _tool_input_targets_shared_worktree(item, key):
+                return True
+        return False
+    if not _looks_like_path_key(key):
+        return False
+    return _path_uses_shared_worktree(value)
+
+
+def _tool_input_shared_worktree_task(value: Any, key: str | None = None) -> str | None:
+    if isinstance(value, dict):
+        for nested_key, nested_value in value.items():
+            task_name = _tool_input_shared_worktree_task(nested_value, str(nested_key))
+            if task_name:
+                return task_name
+        return None
+    if isinstance(value, list):
+        for item in value:
+            task_name = _tool_input_shared_worktree_task(item, key)
+            if task_name:
+                return task_name
+        return None
+    if not _looks_like_path_key(key):
+        return None
+    return _extract_shared_worktree_task_name(value)
+
+
+def infer_task_dir_from_shared_worktree_signal(
+    repo_root: str,
+    tool_input: dict,
+    cwd: str,
+) -> str | None:
+    for path_value in (cwd, repo_root):
+        task_name = _extract_shared_worktree_task_name(path_value)
+        if task_name:
+            return f".trellis/tasks/{task_name}"
+
+    task_name = _tool_input_shared_worktree_task(tool_input)
+    if task_name:
+        return f".trellis/tasks/{task_name}"
+    return None
+
+
+def has_shared_worktree_signal(
+    repo_root: str,
+    task_dir: str | None,
+    tool_input: dict,
+    cwd: str,
+) -> bool:
+    if _task_strategy_uses_shared_worktree(repo_root, task_dir):
+        return True
+    if _path_uses_shared_worktree(repo_root) or _path_uses_shared_worktree(cwd):
+        return True
+    return _tool_input_targets_shared_worktree(tool_input)
+
+
+def strip_conflicting_worktree_isolation(tool_input: dict) -> tuple[dict, bool]:
+    isolation = tool_input.get("isolation")
+    if isinstance(isolation, str) and isolation.strip().lower() == "worktree":
+        updated = dict(tool_input)
+        updated.pop("isolation", None)
+        return updated, True
+    return tool_input, False
+
+
+def _build_shared_worktree_conflict_notice(task_dir: str | None) -> str:
+    task_name = Path(task_dir).name if task_dir else "<task-dir-name>"
+    return (
+        "<trellis-worktree-conflict>\n"
+        "检测到 Claude Code 共享 worktree 策略与宿主 `isolation: \"worktree\"` 冲突。\n"
+        "Trellis 已在子代理派发前自动移除 `isolation: \"worktree\"`。\n"
+        f"当前子代理将继续在共享 `./.trellis/trellis-worktrees/{task_name}` 路径工作。\n"
+        "</trellis-worktree-conflict>"
+    )
+
+
+def _build_shared_worktree_conflict_system_message(task_dir: str | None) -> str:
+    task_name = Path(task_dir).name if task_dir else "<task-dir-name>"
+    return (
+        "Trellis 已自动移除冲突的 `isolation: \"worktree\"`，"
+        f"当前子代理继续使用共享 `./.trellis/trellis-worktrees/{task_name}` 路径。"
+    )
+
+
 def main():
     if os.environ.get("TRELLIS_HOOKS") == "0" or os.environ.get("TRELLIS_DISABLE_HOOKS") == "1":
         sys.exit(0)
@@ -691,6 +1028,10 @@ def main():
     try:
         input_data = json.load(sys.stdin)
     except json.JSONDecodeError:
+        sys.exit(0)
+
+    platform = _detect_platform(input_data)
+    if platform == "claude" and not _read_trellis_switch_enabled():
         sys.exit(0)
 
     subagent_type, original_prompt, tool_input = _parse_hook_input(input_data)
@@ -707,8 +1048,10 @@ def main():
 
     # Get current task directory (research doesn't require it)
     task_dir = get_current_task(repo_root, input_data)
+    if not task_dir and is_claude_code_dev_agent(subagent_type):
+        task_dir = infer_task_dir_from_shared_worktree_signal(repo_root, tool_input, cwd)
 
-    # implement/check need task directory
+    # implement/check/review need task directory
     if subagent_type in AGENTS_REQUIRE_TASK:
         if not task_dir:
             sys.exit(0)
@@ -716,6 +1059,25 @@ def main():
         task_dir_full = os.path.join(repo_root, task_dir)
         if not os.path.exists(task_dir_full):
             sys.exit(0)
+
+    hook_notice = ""
+    hook_system_message = ""
+    normalized_tool_input = tool_input
+    shared_worktree_signal = False
+
+    if platform == "claude" and is_claude_code_dev_agent(subagent_type):
+        shared_worktree_signal = has_shared_worktree_signal(
+            repo_root,
+            task_dir,
+            tool_input,
+            cwd,
+        )
+        if shared_worktree_signal:
+            ensure_shared_worktree_bootstrap(repo_root, task_dir)
+            normalized_tool_input, stripped = strip_conflicting_worktree_isolation(tool_input)
+            if stripped:
+                hook_notice = _build_shared_worktree_conflict_notice(task_dir)
+                hook_system_message = _build_shared_worktree_conflict_system_message(task_dir)
 
     # Check for [finish] marker in prompt (check agent with finish context)
     is_finish_phase = "[finish]" in original_prompt.lower()
@@ -735,6 +1097,10 @@ def main():
             # Regular check phase: use check context (full specs for self-fix loop)
             context = get_check_context(repo_root, task_dir)
             new_prompt = build_check_prompt(original_prompt, context)
+    elif subagent_type in AGENTS_REVIEW:
+        assert task_dir is not None  # validated above
+        context = get_check_context(repo_root, task_dir)
+        new_prompt = build_review_prompt(original_prompt, context)
     elif subagent_type == AGENT_RESEARCH:
         # Research can work without task directory
         context = get_research_context(repo_root, task_dir)
@@ -748,20 +1114,26 @@ def main():
     # Return updated input — use a multi-format output that covers all platforms.
     # Most platforms ignore unrecognized fields, so we include multiple formats.
     # The platform picks whichever fields it understands.
-    updated = {**tool_input, "prompt": new_prompt}
+    updated = {**normalized_tool_input, "prompt": new_prompt}
+    hook_specific_output: dict[str, Any] = {
+        "hookEventName": "PreToolUse",
+        "permissionDecision": "allow",
+        "updatedInput": updated,
+    }
+    if hook_notice:
+        hook_specific_output["additionalContext"] = hook_notice
+
     output = {
         # Claude Code / Qoder / CodeBuddy / Droid format
-        "hookSpecificOutput": {
-            "hookEventName": "PreToolUse",
-            "permissionDecision": "allow",
-            "updatedInput": updated,
-        },
+        "hookSpecificOutput": hook_specific_output,
         # Cursor format
         "permission": "allow",
         "updated_input": updated,
         # Gemini format
         "updatedInput": updated,
     }
+    if hook_system_message:
+        output["systemMessage"] = hook_system_message
 
     print(json.dumps(output, ensure_ascii=False))
     sys.exit(0)

@@ -49,8 +49,6 @@ if sys.platform.startswith("win"):
 DIR_WORKFLOW = ".trellis"
 DIR_SPEC = "spec"
 FILE_TASK_JSON = "task.json"
-WORKTREE_PARENT_DIR = ".trellis"
-WORKTREE_ROOT_DIR = "trellis-worktrees"
 
 # =============================================================================
 # Subagent Constants (change here to rename subagent types)
@@ -95,21 +93,64 @@ def find_repo_root(start_path: str) -> str | None:
     return None
 
 
-def _infer_worktree_task(repo_root: str) -> str | None:
-    root = Path(repo_root).resolve()
+def _candidate_scripts_dirs(repo_root: Path) -> list[Path]:
+    candidates = [repo_root / DIR_WORKFLOW / "scripts"]
     try:
-        if root.parent.name != WORKTREE_ROOT_DIR:
-            return None
-        if root.parent.parent.name != WORKTREE_PARENT_DIR:
-            return None
+        if repo_root.parent.name == "trellis-worktrees" and repo_root.parent.parent.name == DIR_WORKFLOW:
+            candidates.insert(0, repo_root.parent.parent.parent / DIR_WORKFLOW / "scripts")
+    except Exception:
+        pass
+    return candidates
+
+
+def _load_worktree_sync(repo_root: str):
+    repo_path = Path(repo_root).resolve()
+    for scripts_dir in _candidate_scripts_dirs(repo_path):
+        if str(scripts_dir) not in sys.path:
+            sys.path.insert(0, str(scripts_dir))
+        try:
+            from common import worktree_sync  # type: ignore[import-not-found]
+            return worktree_sync
+        except Exception:
+            continue
+    return None
+
+
+def _infer_worktree_task(repo_root: str) -> str | None:
+    worktree_sync = _load_worktree_sync(repo_root)
+    if worktree_sync is None:
+        return None
+    try:
+        return worktree_sync.infer_managed_worktree_task(Path(repo_root).resolve())
     except Exception:
         return None
 
-    task_dir_name = root.name
-    task_dir = root / DIR_WORKFLOW / "tasks" / task_dir_name
-    if not task_dir.is_dir():
-        return None
-    return f".trellis/tasks/{task_dir_name}"
+
+def ensure_shared_worktree_bootstrap(repo_root: str, task_dir: str | None) -> None:
+    if not task_dir:
+        return
+
+    worktree_sync = _load_worktree_sync(repo_root)
+    if worktree_sync is None:
+        return
+
+    task_dir_name = Path(task_dir).name
+    if not task_dir_name:
+        return
+
+    resolved = worktree_sync.resolve_shared_worktree_roots(
+        Path(repo_root).resolve(),
+        task_dir_name,
+    )
+    if not resolved:
+        return
+
+    main_root, worktree_root = resolved
+    worktree_sync.sync_runtime_bundle(main_root, worktree_root)
+
+    target_task_dir = worktree_sync.task_dir(worktree_root, task_dir_name)
+    if not worktree_sync.has_any_task_artifact(target_task_dir):
+        worktree_sync.sync_task_snapshot(main_root, worktree_root, task_dir_name)
 
 
 def _detect_platform(input_data: dict) -> str | None:
@@ -880,6 +921,15 @@ def _looks_like_path_key(key: str | None) -> bool:
     return lowered.endswith(("_path", "_paths", "_file", "_files", "_dir", "_root"))
 
 
+def _extract_shared_worktree_task_name(path_value: Any) -> str | None:
+    normalized = _normalize_hook_text(path_value)
+    if CLAUDE_SHARED_WORKTREE_MARKER not in normalized:
+        return None
+    suffix = normalized.split(CLAUDE_SHARED_WORKTREE_MARKER, 1)[1]
+    task_name = suffix.split("/", 1)[0].strip()
+    return task_name or None
+
+
 def _tool_input_targets_shared_worktree(value: Any, key: str | None = None) -> bool:
     if isinstance(value, dict):
         for nested_key, nested_value in value.items():
@@ -894,6 +944,40 @@ def _tool_input_targets_shared_worktree(value: Any, key: str | None = None) -> b
     if not _looks_like_path_key(key):
         return False
     return _path_uses_shared_worktree(value)
+
+
+def _tool_input_shared_worktree_task(value: Any, key: str | None = None) -> str | None:
+    if isinstance(value, dict):
+        for nested_key, nested_value in value.items():
+            task_name = _tool_input_shared_worktree_task(nested_value, str(nested_key))
+            if task_name:
+                return task_name
+        return None
+    if isinstance(value, list):
+        for item in value:
+            task_name = _tool_input_shared_worktree_task(item, key)
+            if task_name:
+                return task_name
+        return None
+    if not _looks_like_path_key(key):
+        return None
+    return _extract_shared_worktree_task_name(value)
+
+
+def infer_task_dir_from_shared_worktree_signal(
+    repo_root: str,
+    tool_input: dict,
+    cwd: str,
+) -> str | None:
+    for path_value in (cwd, repo_root):
+        task_name = _extract_shared_worktree_task_name(path_value)
+        if task_name:
+            return f".trellis/tasks/{task_name}"
+
+    task_name = _tool_input_shared_worktree_task(tool_input)
+    if task_name:
+        return f".trellis/tasks/{task_name}"
+    return None
 
 
 def has_shared_worktree_signal(
@@ -964,6 +1048,8 @@ def main():
 
     # Get current task directory (research doesn't require it)
     task_dir = get_current_task(repo_root, input_data)
+    if not task_dir and is_claude_code_dev_agent(subagent_type):
+        task_dir = infer_task_dir_from_shared_worktree_signal(repo_root, tool_input, cwd)
 
     # implement/check/review need task directory
     if subagent_type in AGENTS_REQUIRE_TASK:
@@ -977,8 +1063,17 @@ def main():
     hook_notice = ""
     hook_system_message = ""
     normalized_tool_input = tool_input
+    shared_worktree_signal = False
+
     if platform == "claude" and is_claude_code_dev_agent(subagent_type):
-        if has_shared_worktree_signal(repo_root, task_dir, tool_input, cwd):
+        shared_worktree_signal = has_shared_worktree_signal(
+            repo_root,
+            task_dir,
+            tool_input,
+            cwd,
+        )
+        if shared_worktree_signal:
+            ensure_shared_worktree_bootstrap(repo_root, task_dir)
             normalized_tool_input, stripped = strip_conflicting_worktree_isolation(tool_input)
             if stripped:
                 hook_notice = _build_shared_worktree_conflict_notice(task_dir)

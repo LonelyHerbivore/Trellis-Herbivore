@@ -95,6 +95,103 @@ if sys.platform.startswith("win"):
                 pass
 
 
+WORKTREE_PARENT_DIR = ".trellis"
+WORKTREE_ROOT_DIR = "trellis-worktrees"
+
+
+def _candidate_scripts_dirs(repo_root: Path) -> list[Path]:
+    candidates = [repo_root / ".trellis" / "scripts"]
+    try:
+        if repo_root.parent.name == WORKTREE_ROOT_DIR and repo_root.parent.parent.name == WORKTREE_PARENT_DIR:
+            candidates.insert(0, repo_root.parent.parent.parent / ".trellis" / "scripts")
+    except Exception:
+        pass
+    return candidates
+
+
+def _load_worktree_sync(repo_root: Path):
+    for scripts_dir in _candidate_scripts_dirs(repo_root):
+        if str(scripts_dir) not in sys.path:
+            sys.path.insert(0, str(scripts_dir))
+        try:
+            from common import worktree_sync  # type: ignore[import-not-found]
+            return worktree_sync
+        except Exception:
+            continue
+    return None
+
+
+def _format_changed_paths(paths: list[str], limit: int = 6) -> str:
+    preview = paths[:limit]
+    suffix = "" if len(paths) <= limit else ", ..."
+    return ", ".join(preview) + suffix
+
+
+def _maybe_sync_trellis_worktree(project_dir: Path) -> str:
+    try:
+        worktree_sync = _load_worktree_sync(project_dir)
+        if worktree_sync is None:
+            return ""
+
+        detected = worktree_sync.detect_trellis_managed_worktree(project_dir)
+        if not detected:
+            return ""
+
+        main_root, task_dir_name = detected
+        notes: list[str] = [
+            f"Detected Trellis-managed worktree: ./.trellis/trellis-worktrees/{task_dir_name}/",
+        ]
+
+        runtime_synced = worktree_sync.sync_runtime_bundle(main_root, project_dir)
+        if runtime_synced:
+            notes.append(
+                "Bootstrapped runtime bundle from main workspace: "
+                + ", ".join(runtime_synced)
+            )
+
+        target_task_dir = worktree_sync.task_dir(project_dir, task_dir_name)
+        if not worktree_sync.has_any_task_artifact(target_task_dir):
+            planning_synced = worktree_sync.sync_task_snapshot(main_root, project_dir, task_dir_name)
+            if planning_synced:
+                notes.append(
+                    "Bootstrapped current task planning snapshot from main workspace: "
+                    + ", ".join(planning_synced)
+                )
+
+        drift = worktree_sync.collect_task_drift(main_root, project_dir, task_dir_name)
+        if drift:
+            notes.append(
+                "Planning drift detected between main workspace and worktree: "
+                + _format_changed_paths(drift)
+            )
+            if worktree_sync.worktree_has_local_code_changes(project_dir, task_dir_name):
+                notes.append(
+                    "Do NOT auto-overwrite: this worktree has local code changes. "
+                    "Explain the conflict first, recommend creating a new Trellis task "
+                    "to handle the version conflict, and ask whether the user still wants "
+                    "direct overwrite or a new conflict task."
+                )
+            else:
+                notes.append(
+                    "Ask the user exactly: 已检测到主工作区的某个任务的prd.md/planning与worktree不一致，是否执行 主工作区覆盖worktree 的操作？"
+                )
+            notes.append(
+                "If the user still chooses direct overwrite, first create a `.backup-` "
+                "snapshot beside the current task directory, back up the entire current "
+                "task directory, then overwrite only the current task's planning artifacts."
+            )
+            notes.append(
+                "If the user chooses a conflict task, inherit the original task's planning "
+                "context and continue by asking only which version should win and which "
+                "version better satisfies the user's request."
+            )
+
+        if len(notes) == 1:
+            return ""
+        return "\n".join(notes)
+    except Exception as exc:
+        return f"Trellis worktree bootstrap warning: {exc}"
+
 
 def _has_curated_jsonl_entry(jsonl_path: Path) -> bool:
     """Return True iff jsonl has at least one row with a ``file`` field.
@@ -120,6 +217,29 @@ def _has_curated_jsonl_entry(jsonl_path: Path) -> bool:
     return False
 
 
+def _read_trellis_switch_enabled() -> bool:
+    """Return False if trellis-switch.json exists and has enabled=false."""
+    try:
+        cwd = Path.cwd()
+        while cwd != cwd.parent:
+            trellis_dir = cwd / ".trellis"
+            if trellis_dir.is_dir():
+                dev_file = trellis_dir / ".developer"
+                if dev_file.is_file():
+                    for line in dev_file.read_text(encoding="utf-8").splitlines():
+                        if line.startswith("name="):
+                            name = line.split("=", 1)[1].strip()
+                            switch = trellis_dir / "workspace" / name / "trellis-switch.json"
+                            if switch.is_file():
+                                import json as _json
+                                return _json.loads(switch.read_text(encoding="utf-8")).get("enabled", True)
+                return True
+            cwd = cwd.parent
+    except Exception:
+        pass
+    return True
+
+
 def should_skip_injection() -> bool:
     """Check if any platform's non-interactive flag is set, or if Trellis
     hooks are explicitly disabled via TRELLIS_HOOKS=0 / TRELLIS_DISABLE_HOOKS=1.
@@ -127,6 +247,8 @@ def should_skip_injection() -> bool:
     if os.environ.get("TRELLIS_HOOKS") == "0":
         return True
     if os.environ.get("TRELLIS_DISABLE_HOOKS") == "1":
+        return True
+    if _detect_platform({}) == "claude" and not _read_trellis_switch_enabled():
         return True
     non_interactive_vars = [
         "CLAUDE_NON_INTERACTIVE",
@@ -291,6 +413,16 @@ def run_script(script_path: Path, context_key: str | None = None) -> str:
         return "No context available"
 
 
+def _infer_worktree_task_ref(repo_root: Path) -> str | None:
+    worktree_sync = _load_worktree_sync(repo_root)
+    if worktree_sync is None:
+        return None
+    try:
+        return worktree_sync.infer_managed_worktree_task(repo_root)
+    except Exception:
+        return None
+
+
 def _normalize_task_ref(task_ref: str) -> str:
     normalized = task_ref.strip()
     if not normalized:
@@ -323,18 +455,19 @@ def _resolve_task_dir(trellis_dir: Path, task_ref: str) -> Path:
 def _get_task_status(trellis_dir: Path, input_data: dict) -> str:
     """Return compact active-task status, artifact presence, and next action."""
     active = _resolve_active_task(trellis_dir, input_data)
+    task_ref = active.task_path or _infer_worktree_task_ref(trellis_dir.parent)
 
-    if not active.task_path:
+    if not task_ref:
         return (
             "Status: NO ACTIVE TASK\n"
             "Next-Action: Classify the current turn before creating any Trellis task. "
             "Simple conversation / small task asks only whether this turn should create a Trellis task. "
-            "Complex task asks whether task creation and planning are allowed."
+            "Complex task asks whether task creation and planning are allowed. "
+            "For Claude Code workflow requests in natural language, guide the user to `task.py create` first."
         )
 
-    task_ref = active.task_path
     task_dir = _resolve_task_dir(trellis_dir, task_ref)
-    if active.stale or not task_dir.is_dir():
+    if active.task_path and (active.stale or not task_dir.is_dir()):
         return (
             f"Status: STALE POINTER\nTask: {task_ref}\n"
             f"Next-Action: Run `python3 ./.trellis/scripts/task.py finish` to clear the stale pointer, "
@@ -616,8 +749,9 @@ def _build_compact_current_state(
     lines.append(_format_git_state(repo_root))
 
     active = _resolve_active_task(trellis_dir, input_data)
-    if active.task_path:
-        task_dir = _resolve_task_dir(trellis_dir, active.task_path)
+    task_ref = active.task_path or _infer_worktree_task_ref(repo_root)
+    if task_ref:
+        task_dir = _resolve_task_dir(trellis_dir, task_ref)
         status = "unknown"
         task_json = task_dir / "task.json"
         if task_json.is_file():
@@ -749,6 +883,7 @@ def main():
     if project_dir is None:
         project_dir = Path(_normalize_windows_shell_path(hook_input.get("cwd", "."))).resolve()
 
+    worktree_sync_notice = _maybe_sync_trellis_worktree(project_dir)
     trellis_dir = project_dir / ".trellis"
     context_key = _resolve_context_key(trellis_dir, hook_input)
     _persist_context_key_for_bash(context_key)
@@ -780,6 +915,9 @@ Trellis compact SessionStart context. Use it to orient the session; load details
     output.write("<current-state>\n")
     output.write(_build_compact_current_state(trellis_dir, hook_input, spec_index_paths))
     output.write("\n</current-state>\n\n")
+
+    if worktree_sync_notice:
+        output.write(f"<worktree-sync>\n{worktree_sync_notice}\n</worktree-sync>\n\n")
 
     output.write("<trellis-workflow>\n")
     output.write(_build_workflow_overview(trellis_dir / "workflow.md"))

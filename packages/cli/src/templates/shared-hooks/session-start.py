@@ -9,12 +9,10 @@ from __future__ import annotations
 import warnings
 warnings.filterwarnings("ignore")
 
-import hashlib
 import json
 import os
 import re
 import shlex
-import shutil
 import subprocess
 import sys
 from io import StringIO
@@ -99,210 +97,28 @@ if sys.platform.startswith("win"):
 
 WORKTREE_PARENT_DIR = ".trellis"
 WORKTREE_ROOT_DIR = "trellis-worktrees"
-RUNTIME_BUNDLE_FILES = (
-    ".trellis/workflow.md",
-    ".trellis/config.yaml",
-    ".trellis/.gitignore",
-)
-RUNTIME_BUNDLE_DIRS = (
-    ".trellis/scripts",
-)
-PLANNING_FILE_NAMES = (
-    "task.json",
-    "prd.md",
-    "design.md",
-    "implement.md",
-    "implement.jsonl",
-    "check.jsonl",
-)
-PLANNING_DIR_NAMES = ("research",)
 
 
-def _remove_path(path: Path) -> None:
-    if path.is_symlink() or path.is_file():
-        path.unlink()
-        return
-    if path.is_dir():
-        shutil.rmtree(path)
-
-
-def _hash_file(path: Path) -> str:
-    digest = hashlib.sha256()
-    with path.open("rb") as handle:
-        for chunk in iter(lambda: handle.read(65536), b""):
-            digest.update(chunk)
-    return digest.hexdigest()
-
-
-def _snapshot_dir(path: Path) -> dict[str, str]:
-    if not path.is_dir():
-        return {}
-    snapshot: dict[str, str] = {}
-    for child in sorted(path.rglob("*")):
-        if child.is_file():
-            snapshot[child.relative_to(path).as_posix()] = _hash_file(child)
-    return snapshot
-
-
-def _same_file(src: Path, dst: Path) -> bool:
-    return src.is_file() and dst.is_file() and _hash_file(src) == _hash_file(dst)
-
-
-def _same_tree(src: Path, dst: Path) -> bool:
-    return src.is_dir() and dst.is_dir() and _snapshot_dir(src) == _snapshot_dir(dst)
-
-
-def _copy_file(src: Path, dst: Path) -> None:
-    dst.parent.mkdir(parents=True, exist_ok=True)
-    shutil.copy2(src, dst)
-
-
-def _copy_tree(src: Path, dst: Path) -> None:
-    if dst.exists():
-        _remove_path(dst)
-    dst.parent.mkdir(parents=True, exist_ok=True)
-    shutil.copytree(src, dst)
-
-
-def _detect_trellis_managed_worktree(repo_root: Path) -> tuple[Path, str] | None:
+def _candidate_scripts_dirs(repo_root: Path) -> list[Path]:
+    candidates = [repo_root / ".trellis" / "scripts"]
     try:
-        if repo_root.parent.name != WORKTREE_ROOT_DIR:
-            return None
-        if repo_root.parent.parent.name != WORKTREE_PARENT_DIR:
-            return None
-        main_root = repo_root.parent.parent.parent
-        if not (main_root / ".git").exists():
-            return None
-        return main_root, repo_root.name
+        if repo_root.parent.name == WORKTREE_ROOT_DIR and repo_root.parent.parent.name == WORKTREE_PARENT_DIR:
+            candidates.insert(0, repo_root.parent.parent.parent / ".trellis" / "scripts")
     except Exception:
-        return None
+        pass
+    return candidates
 
 
-def _task_dir(repo_root: Path, task_dir_name: str) -> Path:
-    return repo_root / ".trellis" / "tasks" / task_dir_name
-
-
-def _task_snapshot(task_dir: Path) -> dict[str, str]:
-    snapshot: dict[str, str] = {}
-    for name in PLANNING_FILE_NAMES:
-        file_path = task_dir / name
-        if file_path.is_file():
-            snapshot[name] = _hash_file(file_path)
-    for name in PLANNING_DIR_NAMES:
-        dir_path = task_dir / name
-        if not dir_path.is_dir():
+def _load_worktree_sync(repo_root: Path):
+    for scripts_dir in _candidate_scripts_dirs(repo_root):
+        if str(scripts_dir) not in sys.path:
+            sys.path.insert(0, str(scripts_dir))
+        try:
+            from common import worktree_sync  # type: ignore[import-not-found]
+            return worktree_sync
+        except Exception:
             continue
-        for child in sorted(dir_path.rglob("*")):
-            if child.is_file():
-                snapshot[child.relative_to(task_dir).as_posix()] = _hash_file(child)
-    return snapshot
-
-
-def _has_any_task_artifact(task_dir: Path) -> bool:
-    for name in PLANNING_FILE_NAMES:
-        if (task_dir / name).is_file():
-            return True
-    for name in PLANNING_DIR_NAMES:
-        if (task_dir / name).exists():
-            return True
-    return False
-
-
-def _sync_runtime_bundle(main_root: Path, worktree_root: Path) -> list[str]:
-    synced: list[str] = []
-    for relative_path in RUNTIME_BUNDLE_FILES:
-        src = main_root / relative_path
-        dst = worktree_root / relative_path
-        if not src.is_file() or _same_file(src, dst):
-            continue
-        _copy_file(src, dst)
-        synced.append(relative_path)
-    for relative_path in RUNTIME_BUNDLE_DIRS:
-        src = main_root / relative_path
-        dst = worktree_root / relative_path
-        if not src.is_dir() or _same_tree(src, dst):
-            continue
-        _copy_tree(src, dst)
-        synced.append(relative_path)
-    return synced
-
-
-def _sync_task_snapshot(main_root: Path, worktree_root: Path, task_dir_name: str) -> list[str]:
-    source_task_dir = _task_dir(main_root, task_dir_name)
-    target_task_dir = _task_dir(worktree_root, task_dir_name)
-    if not source_task_dir.is_dir():
-        return []
-
-    synced: list[str] = []
-    for name in PLANNING_FILE_NAMES:
-        src = source_task_dir / name
-        if not src.is_file():
-            continue
-        dst = target_task_dir / name
-        if _same_file(src, dst):
-            continue
-        _copy_file(src, dst)
-        synced.append(name)
-
-    for name in PLANNING_DIR_NAMES:
-        src = source_task_dir / name
-        if not src.is_dir():
-            continue
-        dst = target_task_dir / name
-        if _same_tree(src, dst):
-            continue
-        _copy_tree(src, dst)
-        synced.append(name)
-
-    return synced
-
-
-def _collect_task_drift(main_root: Path, worktree_root: Path, task_dir_name: str) -> list[str]:
-    source_snapshot = _task_snapshot(_task_dir(main_root, task_dir_name))
-    target_snapshot = _task_snapshot(_task_dir(worktree_root, task_dir_name))
-    keys = sorted(set(source_snapshot) | set(target_snapshot))
-    return [key for key in keys if source_snapshot.get(key) != target_snapshot.get(key)]
-
-
-def _is_managed_worktree_path(path_str: str, task_dir_name: str) -> bool:
-    normalized = path_str.replace("\\", "/").strip().strip("/")
-
-    for relative_path in RUNTIME_BUNDLE_FILES:
-        runtime_path = relative_path.strip("/")
-        if normalized == runtime_path:
-            return True
-    for relative_path in RUNTIME_BUNDLE_DIRS:
-        runtime_dir = relative_path.strip("/")
-        if normalized == runtime_dir or normalized.startswith(runtime_dir + "/"):
-            return True
-
-    task_root = f".trellis/tasks/{task_dir_name}"
-    if normalized in (".trellis/tasks", task_root):
-        return True
-    task_prefix = task_root + "/"
-    if not normalized.startswith(task_prefix):
-        return False
-    task_relative = normalized[len(task_prefix):]
-    if not task_relative:
-        return True
-    if task_relative in PLANNING_FILE_NAMES:
-        return True
-    for dir_name in PLANNING_DIR_NAMES:
-        if task_relative == dir_name or task_relative.startswith(dir_name + "/"):
-            return True
-    return False
-
-
-def _worktree_has_local_code_changes(worktree_root: Path, task_dir_name: str) -> bool:
-    if not worktree_root.exists():
-        return False
-    for child in sorted(worktree_root.rglob("*")):
-        if child.is_dir():
-            continue
-        relative_path = child.relative_to(worktree_root).as_posix()
-        if not _is_managed_worktree_path(relative_path, task_dir_name):
-            return True
-    return False
+    return None
 
 
 def _format_changed_paths(paths: list[str], limit: int = 6) -> str:
@@ -313,7 +129,11 @@ def _format_changed_paths(paths: list[str], limit: int = 6) -> str:
 
 def _maybe_sync_trellis_worktree(project_dir: Path) -> str:
     try:
-        detected = _detect_trellis_managed_worktree(project_dir)
+        worktree_sync = _load_worktree_sync(project_dir)
+        if worktree_sync is None:
+            return ""
+
+        detected = worktree_sync.detect_trellis_managed_worktree(project_dir)
         if not detected:
             return ""
 
@@ -322,29 +142,29 @@ def _maybe_sync_trellis_worktree(project_dir: Path) -> str:
             f"Detected Trellis-managed worktree: ./.trellis/trellis-worktrees/{task_dir_name}/",
         ]
 
-        runtime_synced = _sync_runtime_bundle(main_root, project_dir)
+        runtime_synced = worktree_sync.sync_runtime_bundle(main_root, project_dir)
         if runtime_synced:
             notes.append(
                 "Bootstrapped runtime bundle from main workspace: "
                 + ", ".join(runtime_synced)
             )
 
-        target_task_dir = _task_dir(project_dir, task_dir_name)
-        if not _has_any_task_artifact(target_task_dir):
-            planning_synced = _sync_task_snapshot(main_root, project_dir, task_dir_name)
+        target_task_dir = worktree_sync.task_dir(project_dir, task_dir_name)
+        if not worktree_sync.has_any_task_artifact(target_task_dir):
+            planning_synced = worktree_sync.sync_task_snapshot(main_root, project_dir, task_dir_name)
             if planning_synced:
                 notes.append(
                     "Bootstrapped current task planning snapshot from main workspace: "
                     + ", ".join(planning_synced)
                 )
 
-        drift = _collect_task_drift(main_root, project_dir, task_dir_name)
+        drift = worktree_sync.collect_task_drift(main_root, project_dir, task_dir_name)
         if drift:
             notes.append(
                 "Planning drift detected between main workspace and worktree: "
                 + _format_changed_paths(drift)
             )
-            if _worktree_has_local_code_changes(project_dir, task_dir_name):
+            if worktree_sync.worktree_has_local_code_changes(project_dir, task_dir_name):
                 notes.append(
                     "Do NOT auto-overwrite: this worktree has local code changes. "
                     "Explain the conflict first, recommend creating a new Trellis task "
@@ -594,14 +414,13 @@ def run_script(script_path: Path, context_key: str | None = None) -> str:
 
 
 def _infer_worktree_task_ref(repo_root: Path) -> str | None:
-    detected = _detect_trellis_managed_worktree(repo_root)
-    if not detected:
+    worktree_sync = _load_worktree_sync(repo_root)
+    if worktree_sync is None:
         return None
-    _, task_dir_name = detected
-    task_dir = _task_dir(repo_root, task_dir_name)
-    if not task_dir.is_dir():
+    try:
+        return worktree_sync.infer_managed_worktree_task(repo_root)
+    except Exception:
         return None
-    return f".trellis/tasks/{task_dir_name}"
 
 
 def _normalize_task_ref(task_ref: str) -> str:

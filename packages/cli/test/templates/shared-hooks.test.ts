@@ -151,6 +151,31 @@ function setupManagedWorktreeRepo(
   writeTaskArtifacts(worktreeRoot, taskName, prd, implementPlan);
 }
 
+function commitRepoState(repoRoot: string, message = "init"): void {
+  spawnSync("git", ["config", "user.email", "test@example.com"], {
+    cwd: repoRoot,
+    encoding: "utf-8",
+  });
+  spawnSync("git", ["config", "user.name", "Trellis Test"], {
+    cwd: repoRoot,
+    encoding: "utf-8",
+  });
+  const result = spawnSync("git", ["add", "."], {
+    cwd: repoRoot,
+    encoding: "utf-8",
+  });
+  if (result.status !== 0) {
+    throw new Error(result.stderr || result.stdout || "git add failed");
+  }
+  const commit = spawnSync("git", ["commit", "-q", "-m", message], {
+    cwd: repoRoot,
+    encoding: "utf-8",
+  });
+  if (commit.status !== 0) {
+    throw new Error(commit.stderr || commit.stdout || "git commit failed");
+  }
+}
+
 function runSessionStart(worktreeRoot: string): string {
   const sessionStart = getSharedHookScripts().find((h) => h.name === "session-start.py");
   if (!sessionStart) {
@@ -421,9 +446,15 @@ describe.skipIf(!hasPython())("shared subagent hook worktree isolation fix", () 
     );
   });
 
-  it("uses structured tool_input path fields as the shared worktree signal", () => {
+  it("uses structured tool_input path fields as the shared worktree signal without active task state", () => {
     setupMainRepo(repoRoot, taskName, "# prd\n", "# implement\n");
-    const contextId = setSessionActiveTask(repoRoot, taskName, "path-field-session");
+    const sharedWorktreeRoot = path.join(
+      repoRoot,
+      ".trellis",
+      "trellis-worktrees",
+      taskName,
+    );
+    fs.mkdirSync(sharedWorktreeRoot, { recursive: true });
 
     const result = runPreToolUseHook(
       repoRoot,
@@ -439,7 +470,6 @@ describe.skipIf(!hasPython())("shared subagent hook worktree isolation fix", () 
       },
       {
         CLAUDE_PROJECT_DIR: repoRoot,
-        TRELLIS_CONTEXT_ID: contextId,
       },
     );
 
@@ -447,6 +477,52 @@ describe.skipIf(!hasPython())("shared subagent hook worktree isolation fix", () 
     expect(result.hookSpecificOutput?.additionalContext).toContain(
       '自动移除 `isolation: "worktree"`',
     );
+    expect(result.hookSpecificOutput?.updatedInput?.prompt).toContain(
+      "<!-- trellis-hook-injected -->",
+    );
+    expect(
+      fs.existsSync(path.join(sharedWorktreeRoot, ".trellis", "scripts", "task.py")),
+    ).toBe(true);
+  });
+
+  it("bootstraps runtime bundle into the shared worktree before dispatch", () => {
+    setupMainRepo(
+      repoRoot,
+      taskName,
+      "# prd\n",
+      "# implement\n- 开发模式：subagent\n- 分支策略：worktree（路径：./.trellis/trellis-worktrees/06-05-hook-isolation-fix）\n",
+    );
+    const sharedWorktreeRoot = path.join(
+      repoRoot,
+      ".trellis",
+      "trellis-worktrees",
+      taskName,
+    );
+    fs.mkdirSync(sharedWorktreeRoot, { recursive: true });
+    const contextId = setSessionActiveTask(repoRoot, taskName, "bootstrap-session");
+
+    runPreToolUseHook(
+      repoRoot,
+      {
+        cwd: repoRoot,
+        tool_name: "Agent",
+        tool_input: {
+          subagent_type: "trellis-implement",
+          prompt: "Implement the requested fix.",
+        },
+      },
+      {
+        CLAUDE_PROJECT_DIR: repoRoot,
+        TRELLIS_CONTEXT_ID: contextId,
+      },
+    );
+
+    expect(
+      fs.existsSync(path.join(sharedWorktreeRoot, ".trellis", "scripts", "task.py")),
+    ).toBe(true);
+    expect(
+      fs.existsSync(path.join(sharedWorktreeRoot, ".trellis", "tasks", taskName, "prd.md")),
+    ).toBe(true);
   });
 
   it("covers Claude review gates when the task strategy is recorded only in prd.md", () => {
@@ -659,18 +735,15 @@ describe.skipIf(!hasPython())("shared session-start worktree bootstrap", () => {
     expect(fs.existsSync(path.join(worktreeRoot, ".trellis", ".runtime"))).toBe(false);
   });
 
-  it("reports planning drift and asks for explicit main-workspace overwrite", () => {
+  it("reports planning drift and asks for explicit main-workspace overwrite when the populated worktree is git-clean", () => {
     setupMainRepo(repoRoot, taskName, "main planning\n");
-    fs.mkdirSync(path.join(worktreeRoot, ".trellis", "tasks", taskName), {
-      recursive: true,
-    });
+    setupManagedWorktreeRepo(worktreeRoot, taskName, "main planning\n");
+    fs.mkdirSync(path.join(worktreeRoot, "src"), { recursive: true });
+    fs.writeFileSync(path.join(worktreeRoot, "src", "index.ts"), "export const clean = true;\n");
+    commitRepoState(worktreeRoot, "init worktree");
     fs.writeFileSync(
-      path.join(worktreeRoot, ".trellis", "tasks", taskName, "task.json"),
-      JSON.stringify({ title: taskName, status: "in_progress" }) + "\n",
-    );
-    fs.writeFileSync(
-      path.join(worktreeRoot, ".trellis", "tasks", taskName, "prd.md"),
-      "worktree planning\n",
+      path.join(repoRoot, ".trellis", "tasks", taskName, "prd.md"),
+      "main planning updated\n",
     );
 
     const raw = runSessionStart(worktreeRoot);
@@ -683,7 +756,36 @@ describe.skipIf(!hasPython())("shared session-start worktree bootstrap", () => {
     expect(context).toContain(
       "已检测到主工作区的某个任务的prd.md/planning与worktree不一致，是否执行 主工作区覆盖worktree 的操作？",
     );
+    expect(context).not.toContain("Do NOT auto-overwrite: this worktree has local code changes.");
     expect(context).toContain("`.backup-`");
     expect(context).toContain("inherit the original task's planning context");
+  });
+
+  it("blocks auto-overwrite when the populated worktree has local code changes", () => {
+    setupMainRepo(repoRoot, taskName, "main planning\n");
+    setupManagedWorktreeRepo(worktreeRoot, taskName, "main planning\n");
+    fs.mkdirSync(path.join(worktreeRoot, "src"), { recursive: true });
+    const sourceFile = path.join(worktreeRoot, "src", "index.ts");
+    fs.writeFileSync(sourceFile, "export const clean = true;\n");
+    commitRepoState(worktreeRoot, "init worktree");
+    fs.writeFileSync(sourceFile, "export const clean = false;\n");
+    fs.writeFileSync(
+      path.join(repoRoot, ".trellis", "tasks", taskName, "prd.md"),
+      "main planning updated\n",
+    );
+
+    const raw = runSessionStart(worktreeRoot);
+    const parsed = JSON.parse(raw) as {
+      hookSpecificOutput?: { additionalContext?: string };
+    };
+    const context = parsed.hookSpecificOutput?.additionalContext ?? "";
+
+    expect(context).toContain("Planning drift detected between main workspace and worktree");
+    expect(context).toContain(
+      "Do NOT auto-overwrite: this worktree has local code changes.",
+    );
+    expect(context).not.toContain(
+      "已检测到主工作区的某个任务的prd.md/planning与worktree不一致，是否执行 主工作区覆盖worktree 的操作？",
+    );
   });
 });

@@ -11,6 +11,7 @@ import {
   commonTaskUtils,
   commonActiveTask,
   commonCliAdapter,
+  commonWorktreeSync,
   getDeveloperScript,
   initDeveloperScript,
   taskScript,
@@ -36,6 +37,7 @@ describe("trellis template constants", () => {
     commonTaskUtils,
     commonActiveTask,
     commonCliAdapter,
+    commonWorktreeSync,
     getDeveloperScript,
     initDeveloperScript,
     taskScript,
@@ -309,6 +311,7 @@ describe("getAllScripts", () => {
     expect(scripts.has("common/__init__.py")).toBe(true);
     expect(scripts.has("common/paths.py")).toBe(true);
     expect(scripts.has("common/active_task.py")).toBe(true);
+    expect(scripts.has("common/worktree_sync.py")).toBe(true);
     expect(scripts.has("task.py")).toBe(true);
     expect(scripts.has("get_developer.py")).toBe(true);
   });

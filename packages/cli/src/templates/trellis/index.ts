@@ -60,6 +60,7 @@ export const commonTrellisConfig = readTemplate(
   "scripts/common/trellis_config.py",
 );
 export const commonSafeCommit = readTemplate("scripts/common/safe_commit.py");
+export const commonWorktreeSync = readTemplate("scripts/common/worktree_sync.py");
 export const trellisSwitch = readTemplate("scripts/trellis_switch.py");
 export const assertTrellisEnabled = readTemplate("scripts/assert_trellis_enabled.py");
 
@@ -106,6 +107,7 @@ export function getAllScripts(): Map<string, string> {
   scripts.set("common/workflow_phase.py", commonWorkflowPhase);
   scripts.set("common/trellis_config.py", commonTrellisConfig);
   scripts.set("common/safe_commit.py", commonSafeCommit);
+  scripts.set("common/worktree_sync.py", commonWorktreeSync);
 
   // Main
   scripts.set("get_developer.py", getDeveloperScript);

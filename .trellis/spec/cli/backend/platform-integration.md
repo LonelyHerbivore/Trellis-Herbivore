@@ -844,6 +844,28 @@ Visibility contract:
 - The correction applies to Claude code-development sub-agents (implement / check / spec review / code review / architecture review / merge review), not generic research dispatch.
 - When Trellis removes the conflicting host isolation, it must emit a short user-visible `systemMessage` explaining the correction and keep the fuller explanation in `hookSpecificOutput.additionalContext` for main-session / sub-agent context.
 
+#### Trellis-managed worktree bootstrap and drift contract
+
+When the current repo root is already `./.trellis/trellis-worktrees/<task-dir-name>`, `shared-hooks/session-start.py` and `inject-subagent-context.py` must reuse a single shared Python helper (`common/worktree_sync.py`) for Trellis-managed worktree behavior. Do **not** duplicate bootstrap / drift / overwrite logic separately in hook copies.
+
+Required behavior:
+
+1. Sync the runtime bundle from the main workspace into the managed worktree:
+   - `.trellis/workflow.md`
+   - `.trellis/config.yaml`
+   - `.trellis/.gitignore`
+   - `.trellis/scripts/`
+2. If the managed worktree lacks the current task snapshot, sync the planning artifacts from the main workspace:
+   - `task.json`, `prd.md`, `design.md`, `implement.md`, `implement.jsonl`, `check.jsonl`, `research/`
+3. If planning drift exists between main workspace and managed worktree, classify overwrite safety from **git working-tree state**, not from file existence.
+   - A populated shared worktree naturally contains the whole repo checkout, so "there are normal repo files here" is **not** evidence of local code changes.
+   - "local code changes" means paths reported by `git status --porcelain -z --untracked-files=all` that fall **outside** the Trellis-managed runtime/planning whitelist.
+4. Drift messaging contract:
+   - If drift exists **and** no local code changes are present, ask the explicit overwrite question for "主工作区覆盖worktree".
+   - If drift exists **and** local code changes are present, do **not** suggest auto-overwrite first; explain the conflict and recommend a separate conflict-resolution task.
+
+This contract prevents a permanent false-positive loop where a clean populated worktree is treated as dirty forever just because it already contains repository files.
+
 #### OpenCode injection contract (issue #264)
 
 OpenCode is a hybrid class-1 platform: its main session uses `tool.execute.before` for sub-agent prompt mutation, but it also runs separate `chat.message` plugins (`session-start.js`, `inject-workflow-state.js`) that fire for **every** chat turn — including sub-agent child sessions. Without explicit filtering, those plugins inject 30-40KB of main-session SessionStart context into sub-agent turns and drown the parent's intended prompt injection.
