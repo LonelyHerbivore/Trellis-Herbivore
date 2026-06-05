@@ -1,0 +1,9 @@
+{
+  "version": "0.6.0-beta.29",
+  "description": "Beta 补丁：补齐 Claude shared worktree 的 .trellis/scripts bootstrap，并修正 worktree 漂移检测与覆盖保护。",
+  "breaking": false,
+  "recommendMigrate": false,
+  "changelog": "**修复：**\n- fix(worktree): Claude shared worktree 与 Trellis-managed worktree 在派发前会同步 `.trellis/scripts/`、`.trellis/workflow.md`、`.trellis/config.yaml` 与 `.trellis/.gitignore`，避免 subagent 在 worktree 内执行 `./.trellis/scripts/*` 时因缺少脚本而报错。\n- fix(hooks): `inject-subagent-context.py`、`session-start.py` 与 `common/worktree_sync.py` 现在共享同一套 bootstrap、planning snapshot 同步与 drift 检测逻辑，模板与 dogfood 副本保持一致。\n- fix(worktree): \"local code changes\" 现在基于 `git status --porcelain -z --untracked-files=all` 判断，已填充但 git-clean 的 worktree 不再被误判为 dirty；真正有代码改动时仍会阻止主工作区自动覆盖。\n\n**说明：**\n- 现有项目执行 `trellis update` 后即可获得新的 shared worktree scripts/bootstrap 与漂移保护修复。",
+  "migrations": [],
+  "notes": "安装此版本后请运行 `trellis update`，以同步生成的 shared worktree hooks、`.trellis/scripts/` 与 planning drift 保护逻辑；除非你本地手改过生成模板，否则无需手动迁移。"
+}
