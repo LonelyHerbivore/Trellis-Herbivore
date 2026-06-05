@@ -952,7 +952,7 @@ const BACKUP_EXCLUDE_PATTERNS = [
   // Platform-native worktree dirs — these are full sub-repos the CLI
   // spawns for parallel sessions. Backing them up on every update would
   // snapshot the entire nested working tree. Confirmed conventions:
-  //   Claude Code: .claude/trellis-worktrees/
+  //   Claude Code: .trellis/trellis-worktrees/
   //   Cursor CLI:  .cursor/worktrees/
   //   Gemini CLI:  .gemini/worktrees/
   // Matches Claude Code's Trellis-managed path plus any platform using the

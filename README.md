@@ -150,8 +150,10 @@
 如果选择 `subagent + worktree`，本分支约定所有代码开发子代理固定使用同一个路径：
 
 ```text
-./.claude/trellis-worktrees/<task-dir-name>
+./.trellis/trellis-worktrees/<task-dir-name>
 ```
+
+这和 Claude Code 宿主级的 `Agent(..., isolation: "worktree")` 不是一回事。共享路径策略下，不要再额外启用宿主 isolation worktree；如果真实派发仍带上这个输入，Trellis 的 Claude hook 会自动移除它并给出提示。
 
 这样可以避免多个 worktree 上重复实现同一个任务，浪费上下文和 token。
 

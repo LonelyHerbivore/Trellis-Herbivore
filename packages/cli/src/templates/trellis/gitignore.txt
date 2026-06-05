@@ -24,6 +24,9 @@
 # Update backup directories
 .backup-*
 
+# Shared subagent worktrees
+trellis-worktrees/
+
 # Conflict resolution temp files
 *.new
 

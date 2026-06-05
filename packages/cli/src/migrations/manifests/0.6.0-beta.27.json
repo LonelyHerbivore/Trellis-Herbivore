@@ -1,0 +1,9 @@
+{
+  "version": "0.6.0-beta.27",
+  "description": "Beta patch: make Claude shared-worktree sessions bootstrap planning state correctly and let `trellis-implement` run with `acceptEdits` so subagent implementation can actually write code.",
+  "breaking": false,
+  "recommendMigrate": false,
+  "changelog": "**Enhancements:**\n- fix(claude): `trellis-implement` now ships with `acceptEdits`, bringing the generated Claude agent contract in line with the documented implementation workflow.\n- fix(worktree): shared worktree session bootstrap now restores the runtime bundle and planning snapshot more reliably, so subagent sessions stay aligned with the active task context.\n- fix(update): template/update coverage was refreshed together with the Claude workflow content so existing projects can receive the same worktree and agent-contract fixes through `trellis update`.\n\n**Notes:**\n- This is a generated-template/content refresh for Claude/Trellis projects; no manual file migration is required.",
+  "migrations": [],
+  "notes": "Run `trellis update` to pick up the Claude agent permission refresh and the shared-worktree bootstrap fixes. No manual file migration is required."
+}

@@ -41,6 +41,7 @@ import { replacePythonCommandLiterals } from "../../src/configurators/shared.js"
 // A managed template file that update always handles (Python script)
 const MANAGED_FILE = `${PATHS.SCRIPTS}/get_context.py`;
 const CLAUDE_IMPLEMENT_AGENT = ".claude/agents/trellis-implement.md";
+const CLAUDE_SUBAGENT_HOOK = ".claude/hooks/inject-subagent-context.py";
 
 /** Remove a key from a hash object (avoids eslint no-dynamic-delete) */
 function removeHashEntry(
@@ -317,6 +318,26 @@ describe("update() integration", () => {
 
     const hashes = readHashesV2(hashFilePath());
     hashes[CLAUDE_IMPLEMENT_AGENT] = computeHash(oldContent);
+    writeHashesV2(hashFilePath(), hashes);
+
+    await update({});
+
+    expect(fs.readFileSync(targetFull, "utf-8")).toBe(templateContent);
+  });
+
+  it("#4bb auto-updates the Claude subagent hook when the installed template is older but unmodified", async () => {
+    await init({ yes: true, force: true, claude: true });
+
+    const targetFull = projectFile(CLAUDE_SUBAGENT_HOOK);
+    const templateContent = fs.readFileSync(targetFull, "utf-8");
+    const oldContent = templateContent.replace(
+      'AGENT_MERGE_REVIEW = "trellis-merge-review"\n',
+      "",
+    );
+    fs.writeFileSync(targetFull, oldContent);
+
+    const hashes = readHashesV2(hashFilePath());
+    hashes[CLAUDE_SUBAGENT_HOOK] = computeHash(oldContent);
     writeHashesV2(hashFilePath(), hashes);
 
     await update({});

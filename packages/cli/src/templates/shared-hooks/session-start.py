@@ -97,7 +97,7 @@ if sys.platform.startswith("win"):
                 pass
 
 
-WORKTREE_PARENT_DIR = ".claude"
+WORKTREE_PARENT_DIR = ".trellis"
 WORKTREE_ROOT_DIR = "trellis-worktrees"
 RUNTIME_BUNDLE_FILES = (
     ".trellis/workflow.md",
@@ -319,7 +319,7 @@ def _maybe_sync_trellis_worktree(project_dir: Path) -> str:
 
         main_root, task_dir_name = detected
         notes: list[str] = [
-            f"Detected Trellis-managed worktree: ./.claude/trellis-worktrees/{task_dir_name}/",
+            f"Detected Trellis-managed worktree: ./.trellis/trellis-worktrees/{task_dir_name}/",
         ]
 
         runtime_synced = _sync_runtime_bundle(main_root, project_dir)

@@ -1,0 +1,9 @@
+{
+  "version": "0.6.0-beta.28",
+  "description": "Beta patch: move Claude shared subagent worktrees under `.trellis/trellis-worktrees`, auto-strip conflicting host worktree isolation, and sync the update/review contract around that path.",
+  "breaking": false,
+  "recommendMigrate": false,
+  "changelog": "**Enhancements:**\n- fix(claude): shared Claude subagent worktrees now live under `.trellis/trellis-worktrees/<task-dir-name>`, avoiding the `.claude/**` sensitive-path barrier during `acceptEdits` writes.\n- fix(hooks): the shared subagent hook now strips conflicting Claude `isolation: \"worktree\"` only when the task strategy or structured path fields prove the session is using the Trellis shared worktree contract, avoiding prompt-text false positives.\n- fix(update): generated workflow docs, Claude agent prompts, `.trellis/.gitignore`, safe-commit guards, and update-path tests now agree on the new shared worktree location and review-gate coverage.\n\n**Notes:**\n- Existing projects should run `trellis update` so generated hooks, workflow text, and hygiene guards all move to the new shared worktree path together.",
+  "migrations": [],
+  "notes": "Run `trellis update` after installing this version to move generated Claude shared-worktree hooks and templates onto `.trellis/trellis-worktrees/<task-dir-name>`. No manual file migration is required unless you have locally modified generated templates."
+}

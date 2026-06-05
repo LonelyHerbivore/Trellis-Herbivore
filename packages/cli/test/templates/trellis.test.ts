@@ -254,7 +254,7 @@ describe("trellis template constants", () => {
     const planning = workflowStateBreadcrumb("planning");
     expect(planning).toContain("development mode");
     expect(planning).toContain("branch vs worktree");
-    expect(planning).toContain("./.claude/trellis-worktrees/<task-dir-name>");
+    expect(planning).toContain("./.trellis/trellis-worktrees/<task-dir-name>");
     expect(planning).toContain("trellis-tdd");
     expect(planning).toContain("A.` / `B.` / `C.`");
     expect(planning).toContain("trellis-merge-review");
@@ -288,6 +288,7 @@ describe("trellis template constants", () => {
 
   it("gitignoreTemplate contains ignore patterns", () => {
     expect(gitignoreTemplate).toContain(".developer");
+    expect(gitignoreTemplate).toContain("trellis-worktrees/");
     expect(gitignoreTemplate).toContain("__pycache__");
   });
 });

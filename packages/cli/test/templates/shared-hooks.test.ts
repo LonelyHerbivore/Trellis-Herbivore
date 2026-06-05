@@ -32,7 +32,12 @@ function hasPython(): boolean {
   }
 }
 
-function writeTaskArtifacts(repoRoot: string, taskName: string, prd: string): void {
+function writeTaskArtifacts(
+  repoRoot: string,
+  taskName: string,
+  prd: string,
+  implementPlan = "# implement\n",
+): void {
   const taskDir = path.join(repoRoot, ".trellis", "tasks", taskName);
   fs.mkdirSync(path.join(taskDir, "research"), { recursive: true });
   fs.writeFileSync(
@@ -54,7 +59,7 @@ function writeTaskArtifacts(repoRoot: string, taskName: string, prd: string): vo
   );
   fs.writeFileSync(path.join(taskDir, "prd.md"), prd);
   fs.writeFileSync(path.join(taskDir, "design.md"), "# design\n");
-  fs.writeFileSync(path.join(taskDir, "implement.md"), "# implement\n");
+  fs.writeFileSync(path.join(taskDir, "implement.md"), implementPlan);
   fs.writeFileSync(
     path.join(taskDir, "implement.jsonl"),
     '{"file":".trellis/spec/guides/index.md","reason":"test"}\n',
@@ -66,7 +71,12 @@ function writeTaskArtifacts(repoRoot: string, taskName: string, prd: string): vo
   fs.writeFileSync(path.join(taskDir, "research", "note.md"), "research\n");
 }
 
-function setupMainRepo(repoRoot: string, taskName: string, prd: string): void {
+function setupMainRepo(
+  repoRoot: string,
+  taskName: string,
+  prd: string,
+  implementPlan?: string,
+): void {
   fs.mkdirSync(repoRoot, { recursive: true });
   spawnSync("git", ["init", "-q", "-b", "main"], {
     cwd: repoRoot,
@@ -83,7 +93,62 @@ function setupMainRepo(repoRoot: string, taskName: string, prd: string): void {
   fs.writeFileSync(path.join(repoRoot, ".trellis", "config.yaml"), "session_auto_commit: false\n");
   fs.writeFileSync(path.join(repoRoot, ".trellis", ".gitignore"), ".runtime/\n");
   fs.writeFileSync(path.join(repoRoot, ".trellis", "spec", "guides", "index.md"), "# Guides\n");
-  writeTaskArtifacts(repoRoot, taskName, prd);
+  writeTaskArtifacts(repoRoot, taskName, prd, implementPlan);
+}
+
+function setSessionActiveTask(
+  repoRoot: string,
+  taskName: string,
+  contextId = "test-session",
+): string {
+  const sessionsDir = path.join(repoRoot, ".trellis", ".runtime", "sessions");
+  fs.mkdirSync(sessionsDir, { recursive: true });
+  fs.writeFileSync(
+    path.join(sessionsDir, `${contextId}.json`),
+    JSON.stringify({ current_task: `.trellis/tasks/${taskName}` }) + "\n",
+  );
+  return contextId;
+}
+
+function setupManagedWorktreeRepo(
+  worktreeRoot: string,
+  taskName: string,
+  prd: string,
+  implementPlan = "# implement\n",
+): void {
+  fs.mkdirSync(worktreeRoot, { recursive: true });
+  spawnSync("git", ["init", "-q", "-b", "main"], {
+    cwd: worktreeRoot,
+    encoding: "utf-8",
+  });
+  fs.mkdirSync(path.join(worktreeRoot, ".trellis"), { recursive: true });
+  fs.cpSync(
+    TEMPLATE_SCRIPTS,
+    path.join(worktreeRoot, ".trellis", "scripts"),
+    {
+      recursive: true,
+    },
+  );
+  fs.mkdirSync(path.join(worktreeRoot, ".trellis", "spec", "guides"), {
+    recursive: true,
+  });
+  fs.writeFileSync(
+    path.join(worktreeRoot, ".trellis", "workflow.md"),
+    "# Workflow\n",
+  );
+  fs.writeFileSync(
+    path.join(worktreeRoot, ".trellis", "config.yaml"),
+    "session_auto_commit: false\n",
+  );
+  fs.writeFileSync(
+    path.join(worktreeRoot, ".trellis", ".gitignore"),
+    ".runtime/\n",
+  );
+  fs.writeFileSync(
+    path.join(worktreeRoot, ".trellis", "spec", "guides", "index.md"),
+    "# Guides\n",
+  );
+  writeTaskArtifacts(worktreeRoot, taskName, prd, implementPlan);
 }
 
 function runSessionStart(worktreeRoot: string): string {
@@ -108,6 +173,54 @@ function runSessionStart(worktreeRoot: string): string {
       throw new Error(result.stderr || result.stdout || "session-start failed");
     }
     return result.stdout;
+  } finally {
+    fs.rmSync(scriptDir, { recursive: true, force: true });
+  }
+}
+
+function runPreToolUseHook(
+  cwd: string,
+  input: Record<string, unknown>,
+  env: NodeJS.ProcessEnv = {},
+): {
+  hookSpecificOutput?: {
+    updatedInput?: Record<string, unknown>;
+    additionalContext?: string;
+  };
+  updatedInput?: Record<string, unknown>;
+  updated_input?: Record<string, unknown>;
+  systemMessage?: string;
+} {
+  const hook = getSharedHookScripts().find(
+    (h) => h.name === "inject-subagent-context.py",
+  );
+  if (!hook) {
+    throw new Error("inject-subagent-context.py template missing");
+  }
+  const scriptDir = fs.mkdtempSync(path.join(os.tmpdir(), "trellis-pretool-"));
+  const scriptPath = path.join(scriptDir, "inject-subagent-context.py");
+  fs.writeFileSync(scriptPath, hook.content);
+  try {
+    const result = spawnSync(PYTHON, [scriptPath], {
+      cwd,
+      encoding: "utf-8",
+      env: {
+        ...process.env,
+        ...env,
+      },
+      input: JSON.stringify(input),
+    });
+    if (result.status !== 0) {
+      throw new Error(result.stderr || result.stdout || "pre-tool hook failed");
+    }
+    return JSON.parse(result.stdout) as {
+      hookSpecificOutput?: {
+        updatedInput?: Record<string, unknown>;
+        additionalContext?: string;
+      };
+      updatedInput?: Record<string, unknown>;
+      updated_input?: Record<string, unknown>;
+    };
   } finally {
     fs.rmSync(scriptDir, { recursive: true, force: true });
   }
@@ -256,6 +369,244 @@ describe("shared-hooks capability table", () => {
   });
 });
 
+describe.skipIf(!hasPython())("shared subagent hook worktree isolation fix", () => {
+  let tmpDir: string;
+  let repoRoot: string;
+  let worktreeRoot: string;
+  const taskName = "06-05-hook-isolation-fix";
+
+  beforeEach(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "trellis-subagent-hook-"));
+    repoRoot = path.join(tmpDir, "repo");
+    worktreeRoot = path.join(
+      tmpDir,
+      ".trellis",
+      "trellis-worktrees",
+      taskName,
+    );
+  });
+
+  afterEach(() => {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("removes conflicting Claude worktree isolation when cwd is already the shared worktree", () => {
+    setupManagedWorktreeRepo(worktreeRoot, taskName, "# prd\n");
+
+    const result = runPreToolUseHook(
+      worktreeRoot,
+      {
+        cwd: worktreeRoot,
+        tool_name: "Agent",
+        tool_input: {
+          subagent_type: "trellis-implement",
+          prompt: "Implement the requested fix.",
+          isolation: "worktree",
+        },
+      },
+      {
+        CLAUDE_PROJECT_DIR: worktreeRoot,
+      },
+    );
+
+    expect(result.hookSpecificOutput?.updatedInput?.isolation).toBeUndefined();
+    expect(result.systemMessage).toContain(
+      '自动移除冲突的 `isolation: "worktree"`',
+    );
+    expect(result.hookSpecificOutput?.additionalContext).toContain(
+      '自动移除 `isolation: "worktree"`',
+    );
+    expect(result.hookSpecificOutput?.updatedInput?.prompt).toContain(
+      "<!-- trellis-hook-injected -->",
+    );
+  });
+
+  it("uses structured tool_input path fields as the shared worktree signal", () => {
+    setupMainRepo(repoRoot, taskName, "# prd\n", "# implement\n");
+    const contextId = setSessionActiveTask(repoRoot, taskName, "path-field-session");
+
+    const result = runPreToolUseHook(
+      repoRoot,
+      {
+        cwd: repoRoot,
+        tool_name: "Agent",
+        tool_input: {
+          subagent_type: "trellis-implement",
+          prompt: "Implement the requested fix.",
+          target_path: `./.trellis/trellis-worktrees/${taskName}/src/index.ts`,
+          isolation: "worktree",
+        },
+      },
+      {
+        CLAUDE_PROJECT_DIR: repoRoot,
+        TRELLIS_CONTEXT_ID: contextId,
+      },
+    );
+
+    expect(result.hookSpecificOutput?.updatedInput?.isolation).toBeUndefined();
+    expect(result.hookSpecificOutput?.additionalContext).toContain(
+      '自动移除 `isolation: "worktree"`',
+    );
+  });
+
+  it("covers Claude review gates when the task strategy is recorded only in prd.md", () => {
+    setupMainRepo(
+      repoRoot,
+      taskName,
+      "# prd\n## 开发策略\n- 开发模式：subagent\n- 分支策略：worktree（路径：./.trellis/trellis-worktrees/06-05-hook-isolation-fix）\n",
+      "# implement\n",
+    );
+    const contextId = setSessionActiveTask(repoRoot, taskName, "spec-review-session");
+
+    const result = runPreToolUseHook(
+      repoRoot,
+      {
+        cwd: repoRoot,
+        tool_name: "Agent",
+        tool_input: {
+          subagent_type: "trellis-spec-review",
+          prompt: "Review this task against the spec.",
+          isolation: "worktree",
+        },
+      },
+      {
+        CLAUDE_PROJECT_DIR: repoRoot,
+        TRELLIS_CONTEXT_ID: contextId,
+      },
+    );
+
+    expect(result.hookSpecificOutput?.updatedInput?.isolation).toBeUndefined();
+    expect(result.hookSpecificOutput?.updatedInput?.prompt).toContain(
+      "# Review Gate Task",
+    );
+    expect(result.hookSpecificOutput?.additionalContext).toContain(
+      "共享 `./.trellis/trellis-worktrees/06-05-hook-isolation-fix` 路径工作",
+    );
+  });
+
+  it("does not mis-detect prose mentions when the recorded strategy is not shared worktree", () => {
+    setupMainRepo(
+      repoRoot,
+      taskName,
+      "# prd\n本文讨论过 `subagent + worktree` 冲突，但本任务不采用该策略。\n",
+      "# implement\n- 开发模式：当前会话持续开发\n- 分支策略：当前分支直接开发\n",
+    );
+    const contextId = setSessionActiveTask(repoRoot, taskName, "direct-branch-session");
+
+    const result = runPreToolUseHook(
+      repoRoot,
+      {
+        cwd: repoRoot,
+        tool_name: "Agent",
+        tool_input: {
+          subagent_type: "trellis-implement",
+          prompt: `本文只是在讨论 ./.trellis/trellis-worktrees/${taskName}/src/index.ts 这个历史路径，不应触发共享 worktree 策略。`,
+          isolation: "worktree",
+        },
+      },
+      {
+        CLAUDE_PROJECT_DIR: repoRoot,
+        TRELLIS_CONTEXT_ID: contextId,
+      },
+    );
+
+    expect(result.hookSpecificOutput?.updatedInput?.isolation).toBe("worktree");
+    expect(result.hookSpecificOutput?.additionalContext).toBeUndefined();
+    expect(result.hookSpecificOutput?.updatedInput?.prompt).toContain(
+      "<!-- trellis-hook-injected -->",
+    );
+  });
+
+  it("covers the documented A/B/C strategy block format in implement.md", () => {
+    setupMainRepo(
+      repoRoot,
+      taskName,
+      "# prd\n",
+      "# implement\nReview-gate contract: explicit-selection-v1\n\n### A. 开发模式\n- 选择：A2 subagent\n\n### B. 分支 / worktree 方式\n- 选择：B2 worktree（路径：./.trellis/trellis-worktrees/06-05-hook-isolation-fix）\n\n### C. 开发流与架构指导\n- 选择：C1 默认流程\n",
+    );
+    const contextId = setSessionActiveTask(repoRoot, taskName, "abc-strategy-session");
+
+    const result = runPreToolUseHook(
+      repoRoot,
+      {
+        cwd: repoRoot,
+        tool_name: "Agent",
+        tool_input: {
+          subagent_type: "trellis-implement",
+          prompt: "Implement the requested fix.",
+          isolation: "worktree",
+        },
+      },
+      {
+        CLAUDE_PROJECT_DIR: repoRoot,
+        TRELLIS_CONTEXT_ID: contextId,
+      },
+    );
+
+    expect(result.hookSpecificOutput?.updatedInput?.isolation).toBeUndefined();
+    expect(result.systemMessage).toContain(
+      '自动移除冲突的 `isolation: "worktree"`',
+    );
+    expect(result.hookSpecificOutput?.additionalContext).toContain(
+      '自动移除 `isolation: "worktree"`',
+    );
+    expect(result.hookSpecificOutput?.updatedInput?.prompt).toContain(
+      "<!-- trellis-hook-injected -->",
+    );
+  });
+
+  it("uses the current shared worktree path as a Claude-only signal even without prompt hints", () => {
+    setupManagedWorktreeRepo(worktreeRoot, taskName, "# prd\n");
+
+    const result = runPreToolUseHook(
+      worktreeRoot,
+      {
+        cwd: worktreeRoot,
+        tool_name: "Agent",
+        tool_input: {
+          subagent_type: "trellis-implement",
+          prompt: "Implement the requested fix.",
+          isolation: "worktree",
+        },
+      },
+      {
+        CLAUDE_PROJECT_DIR: worktreeRoot,
+      },
+    );
+
+    expect(result.hookSpecificOutput?.updatedInput?.isolation).toBeUndefined();
+    expect(result.hookSpecificOutput?.additionalContext).toContain(
+      '自动移除 `isolation: "worktree"`',
+    );
+    expect(result.hookSpecificOutput?.updatedInput?.prompt).toContain(
+      "<!-- trellis-hook-injected -->",
+    );
+  });
+
+  it("keeps isolation untouched on non-Claude platforms even when the shared worktree path appears", () => {
+    setupManagedWorktreeRepo(worktreeRoot, taskName, "# prd\n");
+
+    const result = runPreToolUseHook(
+      worktreeRoot,
+      {
+        cwd: worktreeRoot,
+        tool_name: "Agent",
+        tool_input: {
+          subagent_type: "trellis-implement",
+          prompt: `Implement on ./.trellis/trellis-worktrees/${taskName}/src/index.ts`,
+          isolation: "worktree",
+        },
+      },
+      {
+        CURSOR_PROJECT_DIR: worktreeRoot,
+      },
+    );
+
+    expect(result.hookSpecificOutput?.updatedInput?.isolation).toBe("worktree");
+    expect(result.hookSpecificOutput?.additionalContext).toBeUndefined();
+  });
+});
+
 describe.skipIf(!hasPython())("shared session-start worktree bootstrap", () => {
   let tmpDir: string;
   let repoRoot: string;
@@ -267,7 +618,7 @@ describe.skipIf(!hasPython())("shared session-start worktree bootstrap", () => {
     repoRoot = path.join(tmpDir, "repo");
     worktreeRoot = path.join(
       repoRoot,
-      ".claude",
+      ".trellis",
       "trellis-worktrees",
       taskName,
     );

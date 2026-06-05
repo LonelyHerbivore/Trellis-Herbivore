@@ -5911,7 +5911,7 @@ describe("regression: configSectionsAdded (issue-codex-dispatch-mode)", () => {
 // by .gitignore`, fell back to a hint suggesting `git add .trellis &&
 // commit`. The AI agent driving the workflow extrapolated that to
 // `git add -f .trellis/`, which forced in `.trellis/.backup-*/`,
-// `.trellis/worktrees/`, `.trellis/.template-hashes.json`, etc. — 548 files
+// `.trellis/trellis-worktrees/`, `.trellis/.template-hashes.json`, etc. — 548 files
 // / 83474 lines of caches/backups committed.
 //
 // 0.5.10 fix (since reverted):
@@ -6017,7 +6017,7 @@ describe("regression: safe auto-commit when .trellis/ is gitignored (0.5.10 → 
     writeFile(".trellis/.backup-2026-05-09/should-not-be-committed.txt",
       "secret-backup\n",
     );
-    writeFile(".trellis/worktrees/wt-a/should-not-be-committed.txt",
+    writeFile(".trellis/trellis-worktrees/wt-a/should-not-be-committed.txt",
       "secret-worktree\n",
     );
     writeFile(".trellis/.template-hashes.json", '{"_": "should-not-be-committed"}\n');

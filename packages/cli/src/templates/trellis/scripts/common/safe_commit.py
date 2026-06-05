@@ -8,7 +8,7 @@ template / personal habit). When `add_session.py` and `task.py archive` ran
 their auto-commit and `git add` failed with `ignored by .gitignore`, the AI
 agent driving the workflow "fixed" it by retrying with
 `git add -f .trellis/` — which fan-out-included every ignored subtree
-(`.trellis/.backup-*/`, `.trellis/worktrees/`, `.trellis/.template-hashes.json`,
+(`.trellis/.backup-*/`, `.trellis/trellis-worktrees/`, `.trellis/.template-hashes.json`,
 `.trellis/.runtime/`), committing 548 files / 83474 lines of caches/backups.
 
 Design
@@ -51,7 +51,7 @@ from .paths import (
 # instead of ignoring the whole `.trellis/` tree.
 TRELLIS_IGNORED_SUBPATHS = (
     ".trellis/.backup-*",
-    ".trellis/worktrees/",
+    ".trellis/trellis-worktrees/",
     ".trellis/.template-hashes.json",
     ".trellis/.runtime/",
     ".trellis/.cache/",
@@ -72,7 +72,7 @@ def safe_trellis_paths_to_add(repo_root: Path) -> list[str]:
       - .trellis/tasks/archive/      (whole archive subtree, if present)
 
     Excluded (intentionally — these must not be staged):
-      - .trellis/.backup-*, .trellis/worktrees/,
+      - .trellis/.backup-*, .trellis/trellis-worktrees/,
         .trellis/.template-hashes.json, .trellis/.runtime/, .trellis/.cache/
     """
     paths: list[str] = []

@@ -824,6 +824,26 @@ Platform's PreToolUse-equivalent hook can fire on the sub-agent spawn tool AND m
 | Kiro | per-agent `agentSpawn` hook | direct stdout context |
 | OpenCode | JS plugin `tool.execute.before` | `args.prompt` mutation |
 
+#### Claude Code shared worktree contract
+
+Claude Code's host-level `Agent(..., isolation: "worktree")` is **not** the same thing as Trellis shared `subagent + worktree` dispatch. When a Claude code-development sub-agent is meant to stay on the shared `./.trellis/trellis-worktrees/<task-dir-name>` path, `inject-subagent-context.py` must treat a host `isolation: "worktree"` input as conflicting and remove it before dispatch.
+
+Required signals for the shared-worktree path are:
+
+1. A recorded task strategy selecting `subagent + worktree`.
+   - Prefer the real strategy record in `implement.md`.
+   - If `implement.md` does not carry a strategy record, fall back to `prd.md` for lightweight tasks.
+   - Support both inline fields (`开发模式：...`, `分支策略：...`) and the documented `A.` / `B.` / `C.` strategy-block form with `选择：...` lines.
+2. Or a runtime path signal showing the shared worktree directly.
+   - Current repo root or `cwd` already under `./.trellis/trellis-worktrees/<task-dir-name>`.
+   - Structured path fields in tool input (for example `cwd`, `path`, `target_path`, `file_path`) explicitly point under that shared worktree root.
+
+Visibility contract:
+
+- The correction must remain **Claude-only** and must not change other class-1 platforms.
+- The correction applies to Claude code-development sub-agents (implement / check / spec review / code review / architecture review / merge review), not generic research dispatch.
+- When Trellis removes the conflicting host isolation, it must emit a short user-visible `systemMessage` explaining the correction and keep the fuller explanation in `hookSpecificOutput.additionalContext` for main-session / sub-agent context.
+
 #### OpenCode injection contract (issue #264)
 
 OpenCode is a hybrid class-1 platform: its main session uses `tool.execute.before` for sub-agent prompt mutation, but it also runs separate `chat.message` plugins (`session-start.js`, `inject-workflow-state.js`) that fire for **every** chat turn — including sub-agent child sessions. Without explicit filtering, those plugins inject 30-40KB of main-session SessionStart context into sub-agent turns and drown the parent's intended prompt injection.

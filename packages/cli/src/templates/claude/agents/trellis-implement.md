@@ -28,7 +28,8 @@ Look for the `<!-- trellis-hook-injected -->` marker in your input above.
 
 Before implementing, check whether the task artifacts recorded a development strategy.
 
-- If the strategy is `subagent + worktree`, stay on the shared `./.claude/trellis-worktrees/<task-dir-name>` path and do NOT create or switch to another worktree.
+- If the strategy is `subagent + worktree`, stay on the shared `./.trellis/trellis-worktrees/<task-dir-name>` path and do NOT create or switch to another worktree.
+- On Claude Code, that shared worktree is different from host `Agent(..., isolation: "worktree")`; when they conflict, Trellis removes the host isolation input before dispatch.
 - If the strategy is TDD, align your implementation flow to `trellis-tdd`.
 - If the task artifacts carry `Review-gate contract: explicit-selection-v1`, preserve the configured selection for the main session. Require `Optional review gates status: configured` plus explicit `Enabled optional review gates:` / `Disabled optional review gates:` lists, keep any enabled Claude review gates in this order: `trellis-spec-review` → `trellis-code-review` → `trellis-code-architecture-review`, treat `trellis-improve-codebase-architecture` and `trellis-merge-review` as opt-in gates controlled by the task strategy, and remember that `trellis-check` stays fixed outside this optional set. `trellis-improve-codebase-architecture` deep-review requires `trellis-code-architecture-review`; if deep-review is enabled without that prerequisite, stop and report the invalid strategy record to the main session.
 - If the contract marker is absent, treat the task as a legacy task and preserve the old review-gate behavior instead of silently applying the new-task default.
