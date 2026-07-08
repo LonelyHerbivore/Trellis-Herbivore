@@ -1272,6 +1272,15 @@ describe("regression: current-task path normalization", () => {
     expect(grillMe).toContain("repository-dependent feature additions, feature changes, or bug fixes");
     expect(grillMe).toContain("Before each question, check whether the remaining gap is still a repository fact");
     expect(grillMe).toContain("If a user answer would materially change the current understanding of repository facts");
+
+    expect(brainstorm).toContain("AskUserQuestion");
+    expect(brainstorm).toContain("Every `AskUserQuestion` question must have 2–4 options");
+    expect(brainstorm).toContain("do not put all five optional review gates in one question");
+    expect(brainstorm).toContain("core review gates with `multiSelect: true`");
+    expect(brainstorm).toContain("add-on review gates with `multiSelect: true`");
+    expect(brainstorm).toContain("Do not offer default review-gate packages");
+    expect(grillMe).toContain("AskUserQuestion");
+    expect(grillMe).toContain("review gates must be split into core and add-on `multiSelect: true` questions");
   });
 
   beforeEach(() => {

@@ -212,7 +212,11 @@ planning must also require the explicit `Review-gate contract: explicit-selectio
 marker for new tasks, require configured enabled/disabled optional-gate lists
 before start, keep the legacy fallback limited to tasks that entirely lack that
 marker, and declare that `trellis-improve-codebase-architecture` deep-review
-requires `trellis-code-architecture-review`; in-progress keeps the commit step
+requires `trellis-code-architecture-review`. At the Claude Code development
+strategy decision point, planning must prefer the native `AskUserQuestion` tool,
+keep each question within the 2–4 option limit, split the five optional review
+gates into core and add-on `multiSelect: true` questions, avoid default
+review-gate packages, and fall back to text only for unresolved fields. In-progress keeps the commit step
 reachable before `/trellis:finish-work` and keeps Phase 3.5 merge/final
 verification reachable, including optional `trellis-merge-review` when enabled
 and the final build/test. See:
@@ -222,6 +226,8 @@ and the final build/test. See:
 - `test that workflow.md [workflow-state:planning] mentions planning artifact gate`
 - `test that workflow.md [workflow-state:planning] makes trellis-grill-me a required gate`
 - `test that workflow.md [workflow-state:planning] records the unified development-strategy block and task-level review-gate selection contract`
+- `test that workflow.md [workflow-state:planning] requires native AskUserQuestion for Claude Code development strategy`
+- `test that workflow.md step 1.1 documents AskUserQuestion strategy-question constraints`
 - `test that workflow.md [workflow-state:no_task] asks for task-creation consent`
 
 ---

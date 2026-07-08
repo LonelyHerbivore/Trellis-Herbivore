@@ -55,3 +55,4 @@ By the time this skill is done:
 - `prd.md` has testable acceptance criteria
 - unresolved questions are truly strategic, not factual
 - implementation can move on to development mode / worktree / TDD decisions
+- the next Claude Code development strategy decision should prefer `AskUserQuestion`; each question must have 2–4 options, review gates must be split into core and add-on `multiSelect: true` questions, and text fallback should ask only unresolved fields

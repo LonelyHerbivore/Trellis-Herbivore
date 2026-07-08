@@ -294,6 +294,28 @@ describe("trellis template constants", () => {
     expect(planning).toContain("do NOT implicitly enable `trellis-improve-codebase-architecture` deep-review");
   });
 
+  it("workflow.md planning breadcrumb requires native AskUserQuestion for Claude Code development strategy", () => {
+    const planning = workflowStateBreadcrumb("planning");
+    expect(planning).toContain("AskUserQuestion");
+    expect(planning).toContain("Every `AskUserQuestion` question must have 2–4 options");
+    expect(planning).toContain("do not put all five optional review gates in one question");
+    expect(planning).toContain("core review gates with `multiSelect: true`");
+    expect(planning).toContain("add-on review gates with `multiSelect: true`");
+    expect(planning).toContain("Do not offer default review-gate packages");
+    expect(planning).toContain("ask only for unresolved fields");
+  });
+
+  it("workflow.md step 1.1 documents AskUserQuestion strategy-question constraints", () => {
+    const step = stepSection("1.1");
+    expect(step).toContain("Claude Code 原生 `AskUserQuestion` 工具");
+    expect(step).toContain("必须只有 2–4 options");
+    expect(step).toContain("不要把 5 个 optional review gates 放进同一个 question");
+    expect(step).toContain("核心 review gates 问题使用 `multiSelect: true`");
+    expect(step).toContain("附加 review gates 问题使用 `multiSelect: true`");
+    expect(step).toContain("不提供默认 review-gate 套餐");
+    expect(step).toContain("只补齐未决字段");
+  });
+
   it("workflow.md step 2.2 explains selected review gates and preserved order", () => {
     const step = stepSection("2.2");
     expect(step).toContain("按任务策略运行显式选中的 review gate");
