@@ -1248,9 +1248,30 @@ describe("regression: current-task path normalization", () => {
   )?.content;
   it("[session-current-task] session-start template keeps trellis-grill-me as a required Claude Code planning gate", () => {
     expect(claudeSessionStart).toContain("guide the user to `task.py create` first");
-    expect(workflowMdTemplate).toContain("Planning order for this Claude Code path: `task.py create` → `trellis-brainstorm` → `trellis-grill-me` → development strategy decision.");
+    expect(workflowMdTemplate).toContain("Planning order for this Claude Code path: `task.py create` → `trellis-research` when the research-first gate applies → `trellis-brainstorm` → `trellis-grill-me` → development strategy decision.");
     expect(workflowMdTemplate).toContain("`trellis-grill-me` is a required planning gate on this Claude Code path, not an optional suggestion.");
     expect(workflowMdTemplate).toContain("Before `trellis-grill-me` is complete, do not enter development strategy decisions, do not create or complete `design.md` / `implement.md`, and do not run `task.py start`.");
+  });
+
+  it("[research-first] Claude Code generated planning skills preserve the research gate", () => {
+    const templates = collectPlatformTemplates("claude-code");
+    expect(templates).toBeInstanceOf(Map);
+
+    const brainstorm = templates?.get(".claude/skills/trellis-brainstorm/SKILL.md") ?? "";
+    const grillMe = templates?.get(".claude/skills/trellis-grill-me/SKILL.md") ?? "";
+
+    expect(brainstorm).toContain("Claude Code Research Gate");
+    expect(brainstorm).toContain("run `trellis-research` before the first `trellis-brainstorm` question");
+    expect(brainstorm).toContain("When this gate triggers, explicitly tell the user that repository evidence is required");
+    expect(brainstorm).toContain("persisted to `{TASK_DIR}/research/`");
+    expect(brainstorm).toContain("pure conversation, capability or usage explanation, pure user preference choices");
+    expect(brainstorm).toContain("If a later user answer would materially change the current understanding of repository facts");
+    expect(brainstorm).toContain("If research is inconclusive, report what was checked");
+
+    expect(grillMe).toContain("Claude Code Research Gate");
+    expect(grillMe).toContain("repository-dependent feature additions, feature changes, or bug fixes");
+    expect(grillMe).toContain("Before each question, check whether the remaining gap is still a repository fact");
+    expect(grillMe).toContain("If a user answer would materially change the current understanding of repository facts");
   });
 
   beforeEach(() => {

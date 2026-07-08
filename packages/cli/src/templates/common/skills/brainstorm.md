@@ -14,6 +14,14 @@ This is mandatory. Before asking the user a question, first check whether the an
 
 Do not ask the user to confirm facts that the repository can answer. Ask only for product intent, preference, scope, risk tolerance, or decisions that remain ambiguous after inspection.
 
+## Claude Code Research Gate
+
+On the Claude Code path, feature additions, feature changes, and bug fixes that depend on repository facts must run `trellis-research` before the first `trellis-brainstorm` question. When this gate triggers, explicitly tell the user that repository evidence is required, `trellis-research` is running first, and questioning will resume from the findings. Research findings must be persisted to `{TASK_DIR}/research/` and used to frame the first question.
+
+Do not trigger the pre-brainstorm research gate for pure conversation, capability or usage explanation, pure user preference choices, copy edits that do not depend on repository facts, explicitly local-only small tasks, or when the user explicitly asks to skip research and answer directly.
+
+If a later user answer would materially change the current understanding of repository facts, pause the interview and run `trellis-research` again before asking the next question. If research is inconclusive, report what was checked, which evidence is missing, and which product intent or scope decision the user must provide before asking the question.
+
 ---
 
 Use this skill during Phase 1 planning to turn the user's request into clear requirements and planning artifacts.

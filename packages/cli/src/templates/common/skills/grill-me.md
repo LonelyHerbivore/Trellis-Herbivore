@@ -17,6 +17,14 @@ Use this skill only when:
 
 Do **not** use this skill for questions the codebase can answer directly.
 
+## Claude Code Research Gate
+
+On the Claude Code path, this skill may only continue after the active planning thread has already run any required `trellis-research` pass and persisted findings to `{TASK_DIR}/research/` for repository-dependent feature additions, feature changes, or bug fixes.
+
+Before each question, check whether the remaining gap is still a repository fact. If it is, stop the interview, explicitly tell the user that repository evidence is required, run `trellis-research`, persist the result, and then continue from the evidence. If research is inconclusive, report what was checked, which evidence is missing, and the exact product intent or scope decision needed from the user.
+
+If a user answer would materially change the current understanding of repository facts, run `trellis-research` again before asking the next follow-up question.
+
 ## Interview Contract
 
 - Ask one question at a time.

@@ -185,7 +185,8 @@ Lightweight: `prd.md` can be enough. Complex: finish `prd.md`, `design.md`, and 
 Multi-deliverable scope: consider a parent task plus independently verifiable child tasks; dependencies must be written in child artifacts, not implied by tree position.
 Sub-agent mode: curate `implement.jsonl` and `check.jsonl` as spec/research manifests before start.
 
-Planning order for this Claude Code path: `task.py create` → `trellis-brainstorm` → `trellis-grill-me` → development strategy decision.
+Claude Code research-first gate: for feature additions, feature changes, and bug fixes that depend on repository facts, run `trellis-research` before the first `trellis-brainstorm` question and persist findings to `{TASK_DIR}/research/`. When this gate triggers, explicitly tell the user that repository evidence is required, `trellis-research` is running first, and questioning will resume from the findings. Do not trigger this pre-brainstorm gate for pure conversation, capability or usage explanation, pure user preference choices, copy edits that do not depend on repository facts, explicitly local-only small tasks, or when the user explicitly asks to skip research and answer directly. If a later user answer would materially change the current understanding of repository facts, pause and run `trellis-research` again before the next question. If research is inconclusive, report what was checked, what evidence is missing, and which product intent or scope decision the user must provide before asking the question.
+Planning order for this Claude Code path: `task.py create` → `trellis-research` when the research-first gate applies → `trellis-brainstorm` → `trellis-grill-me` → development strategy decision.
 `trellis-grill-me` is a required planning gate on this Claude Code path, not an optional suggestion.
 Before `trellis-grill-me` is complete, do not enter development strategy decisions, do not create or complete `design.md` / `implement.md`, and do not run `task.py start`.
 Do not enter development strategy decisions until `prd.md` has been tightened through repository-first clarification and one-question-at-a-time follow-up.
@@ -338,6 +339,14 @@ python3 ./.trellis/scripts/task.py create "<任务标题>" --slug <name>
 #### 1.1 Requirement exploration `[required · repeatable]`
 
 加载 `trellis-brainstorm` skill，并按该 skill 的指导与用户交互式澄清需求。
+
+Claude Code research-first gate:
+- 对新增功能、修改现有功能，以及依赖仓库事实的 bug fix，在第一个 `trellis-brainstorm` 问题前先分派 `trellis-research`，并把研究结果写入 `{TASK_DIR}/research/`。
+- 触发该门槛时，先明确告诉用户当前问题需要仓库证据、正在先执行 `trellis-research`，并会基于调研结果继续提问或收敛需求。
+- 排除：纯对话、能力说明、用法解释、纯用户偏好选择、不依赖仓库事实的文案润色、明确只做局部处理的小任务，以及用户明确要求先别 research / 先直接问的请求。
+- 第一次 research 后，问题必须基于 research 结果提出，而不是脱离仓库事实兜底猜测。
+- 如果用户回答会明显影响“仓库当前事实”，继续追问或收敛需求前必须再次分派 `trellis-research`。
+- 如果 research 无法找到足够证据，继续问用户前必须先报告已查证据、缺失证据和需要用户补充的具体意图或范围。
 
 brainstorm skill 会指导你：
 - 一次只问一个问题

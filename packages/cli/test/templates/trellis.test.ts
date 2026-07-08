@@ -240,6 +240,30 @@ describe("trellis template constants", () => {
     expect(step).toContain("不会隐式开启 `trellis-improve-codebase-architecture` deep-review");
   });
 
+  it("workflow.md planning breadcrumb requires Claude Code research before brainstorm when repo facts are needed", () => {
+    const planning = workflowStateBreadcrumb("planning");
+    expect(planning).toContain("Claude Code research-first gate");
+    expect(planning).toContain("feature additions, feature changes, and bug fixes that depend on repository facts");
+    expect(planning).toContain("run `trellis-research` before the first `trellis-brainstorm` question");
+    expect(planning).toContain("When this gate triggers, explicitly tell the user that repository evidence is required");
+    expect(planning).toContain("persist findings to `{TASK_DIR}/research/`");
+    expect(planning).toContain("pure conversation, capability or usage explanation, pure user preference choices");
+    expect(planning).toContain("If a later user answer would materially change the current understanding of repository facts");
+    expect(planning).toContain("If research is inconclusive, report what was checked");
+    expect(planning).toContain("`trellis-research` when the research-first gate applies → `trellis-brainstorm`");
+  });
+
+  it("workflow.md step 1.1 documents the Claude Code research-first gate", () => {
+    const step = stepSection("1.1");
+    expect(step).toContain("Claude Code research-first gate");
+    expect(step).toContain("在第一个 `trellis-brainstorm` 问题前先分派 `trellis-research`");
+    expect(step).toContain("把研究结果写入 `{TASK_DIR}/research/`");
+    expect(step).toContain("触发该门槛时，先明确告诉用户当前问题需要仓库证据");
+    expect(step).toContain("纯对话、能力说明、用法解释、纯用户偏好选择");
+    expect(step).toContain("如果用户回答会明显影响“仓库当前事实”");
+    expect(step).toContain("先报告已查证据、缺失证据");
+  });
+
   it("workflow.md planning breadcrumb keeps requirement clarification before strategy decisions on Claude Code path", () => {
     const planning = workflowStateBreadcrumb("planning");
     expect(planning).toContain("trellis-grill-me");
