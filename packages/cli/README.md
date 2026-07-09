@@ -76,7 +76,7 @@ Prerequisites:
 Install Trellis:
 
 ```bash
-npm install -g trellis-hgl@beta
+npm install -g trellis-hgl@latest
 ```
 
 Initialize a repository:

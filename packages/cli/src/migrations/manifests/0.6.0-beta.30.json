@@ -1,0 +1,9 @@
+{
+  "version": "0.6.0-beta.30",
+  "description": "Beta 补丁：强化 Claude Code planning 的 research-first 提问路径，并用 AskUserQuestion 配置开发策略。",
+  "breaking": false,
+  "recommendMigrate": false,
+  "changelog": "**改进：**\n- feat(workflow): Claude Code planning 在进入 `trellis-brainstorm` 前，会先按 research-first gate 调用 `trellis-research` 调研代码，并把结果写入任务 `research/` 目录。后续问题必须基于调研证据提出，减少盲猜式、兜底式追问。\n- feat(workflow): 开发策略配置优先使用 Claude Code 原生 `AskUserQuestion`，用结构化单选/多选收集执行模式、工作区模式、开发流程、架构指导和 review-gate 选择。\n- docs(upgrade): 升级说明改为推荐 `trellis upgrade` 或 `npm install -g trellis-hgl@latest`，避免依赖当前滞后的 npm `beta` dist-tag。\n\n**说明：**\n- 现有项目执行 `trellis update` 后即可同步新的 workflow、skills 与启动提示。",
+  "migrations": [],
+  "notes": "安装此版本后请在已有项目中运行 `trellis update`，以同步 Claude Code planning 的 research-first 提问路径和 AskUserQuestion 开发策略配置提示。推荐使用 `trellis upgrade` 或 `npm install -g trellis-hgl@latest` 获取最新版本；不要依赖当前滞后的 `trellis-hgl@beta` dist-tag。"
+}

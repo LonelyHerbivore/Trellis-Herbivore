@@ -161,6 +161,8 @@ pnpm release:promote
 
 The release script does not publish locally. The pushed tag is what starts official npm publication.
 
+If the package versions have already been manually set to the intended release version, do not run `pnpm release`, `pnpm release:beta`, `pnpm release:rc`, or `pnpm release:promote` afterward. Those commands always run `bump-versions.js <type>` and will advance to a different version. In that state, run the equivalent release guards, commit the already-bumped files, tag `v<version>`, and push the tag to trigger the same GitHub Actions publish path.
+
 ---
 
 ## Publish workflow sequence

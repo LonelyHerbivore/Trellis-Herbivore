@@ -225,7 +225,7 @@
 ### 安装
 
 ```bash
-npm install -g trellis-hgl@beta
+npm install -g trellis-hgl@latest
 ```
 
 ### 卸载
@@ -241,7 +241,7 @@ npm uninstall -g trellis-hgl
 npm uninstall -g @mindfoldhq/trellis
 
 # 安装最新版 trellis-hgl
-npm install -g trellis-hgl@beta
+npm install -g trellis-hgl@latest
 
 # 进入你自己的项目目录
 cd /path/to/your/project
