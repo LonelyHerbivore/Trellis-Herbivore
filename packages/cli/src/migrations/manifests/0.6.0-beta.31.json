@@ -1,0 +1,9 @@
+{
+  "version": "0.6.0-beta.31",
+  "description": "Beta 补丁：优化 Claude Code subagent 模型分层，降低高频工作流延迟。",
+  "breaking": false,
+  "recommendMigrate": false,
+  "changelog": "**改进：**\n- perf(claude): `trellis-research`、`trellis-check`、`trellis-spec-review`、`trellis-code-review` 与 `trellis-merge-review` 默认使用 Sonnet，降低高频 subagent 的等待时间。\n- perf(review): `trellis-code-architecture-review` 继续固定使用 Opus，保留跨模块架构与复杂度判断能力；`trellis-implement` 继续继承调用方或会话模型。\n- test(update): 新增 fresh init、模板 hash 自动更新和用户自定义 Claude agent 保护的回归覆盖。\n\n**说明：**\n- 现有项目运行 `trellis update` 后，未自定义的 Claude agent 模板会自动同步新模型矩阵；用户修改过的 agent 继续遵守现有更新保护机制。",
+  "migrations": [],
+  "notes": "安装此版本后，请在已有项目中运行 `trellis update` 以同步 Claude Code agent 模板。无需手动迁移；用户自定义过的 agent 文件不会被非强制 update 静默覆盖。"
+}
