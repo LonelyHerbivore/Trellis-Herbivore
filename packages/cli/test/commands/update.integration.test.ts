@@ -41,6 +41,7 @@ import { replacePythonCommandLiterals } from "../../src/configurators/shared.js"
 // A managed template file that update always handles (Python script)
 const MANAGED_FILE = `${PATHS.SCRIPTS}/get_context.py`;
 const CLAUDE_IMPLEMENT_AGENT = ".claude/agents/trellis-implement.md";
+const CLAUDE_CODE_REVIEW_AGENT = ".claude/agents/trellis-code-review.md";
 const CLAUDE_SUBAGENT_HOOK = ".claude/hooks/inject-subagent-context.py";
 
 /** Remove a key from a hash object (avoids eslint no-dynamic-delete) */
@@ -325,6 +326,29 @@ describe("update() integration", () => {
     expect(fs.readFileSync(targetFull, "utf-8")).toBe(templateContent);
   });
 
+  it("#4ba auto-updates an unmodified Claude review agent from Opus to Sonnet", async () => {
+    await init({ yes: true, force: true, claude: true });
+
+    const targetFull = projectFile(CLAUDE_CODE_REVIEW_AGENT);
+    const templateContent = fs.readFileSync(targetFull, "utf-8");
+    const oldContent = templateContent.replace(
+      /model: sonnet(\r?\n)/,
+      "model: opus$1",
+    );
+    fs.writeFileSync(targetFull, oldContent);
+
+    const hashes = readHashesV2(hashFilePath());
+    hashes[CLAUDE_CODE_REVIEW_AGENT] = computeHash(oldContent);
+    writeHashesV2(hashFilePath(), hashes);
+
+    await update({});
+
+    expect(fs.readFileSync(targetFull, "utf-8")).toBe(templateContent);
+    expect(readHashesV2(hashFilePath())[CLAUDE_CODE_REVIEW_AGENT]).toBe(
+      computeHash(templateContent),
+    );
+  });
+
   it("#4bb auto-updates the Claude subagent hook when the installed template is older but unmodified", async () => {
     await init({ yes: true, force: true, claude: true });
 
@@ -469,6 +493,27 @@ describe("update() integration", () => {
     expect(fs.readFileSync(targetFull, "utf-8")).toBe(
       "user customized content",
     );
+  });
+
+  it("#6a preserves a user-customized Claude agent and its existing hash on non-force update", async () => {
+    await init({ yes: true, force: true, claude: true });
+
+    const targetFull = projectFile(CLAUDE_CODE_REVIEW_AGENT);
+    const templateContent = fs.readFileSync(targetFull, "utf-8");
+    const userContent = templateContent.replace(
+      /model: sonnet(\r?\n)/,
+      "model: haiku$1",
+    );
+    const originalHash = readHashesV2(hashFilePath())[CLAUDE_CODE_REVIEW_AGENT];
+    fs.writeFileSync(targetFull, userContent);
+
+    await update({ skipAll: true });
+
+    expect(fs.readFileSync(targetFull, "utf-8")).toBe(userContent);
+    expect(readHashesV2(hashFilePath())[CLAUDE_CODE_REVIEW_AGENT]).toBe(
+      originalHash,
+    );
+    expect(originalHash).not.toBe(computeHash(userContent));
   });
 
   it("#7 createNew creates .new copy without overwriting original", async () => {

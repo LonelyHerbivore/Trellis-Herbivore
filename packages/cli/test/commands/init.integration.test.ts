@@ -163,6 +163,49 @@ describe("init() integration", () => {
     ).toBe(true);
   });
 
+  it("#2a fresh Claude init writes the model matrix and tracks agent templates", async () => {
+    await init({ yes: true, claude: true });
+
+    const sonnetAgents = [
+      "trellis-research",
+      "trellis-check",
+      "trellis-spec-review",
+      "trellis-code-review",
+      "trellis-merge-review",
+    ];
+    const hashFile = path.join(
+      tmpDir,
+      DIR_NAMES.WORKFLOW,
+      ".template-hashes.json",
+    );
+    const hashes = (
+      JSON.parse(fs.readFileSync(hashFile, "utf-8")) as {
+        hashes?: Record<string, string>;
+      }
+    ).hashes ?? {};
+
+    for (const agentName of sonnetAgents) {
+      const relativePath = `.claude/agents/${agentName}.md`;
+      const content = fs.readFileSync(path.join(tmpDir, relativePath), "utf-8");
+      expect(content).toContain("model: sonnet");
+      expect(hashes[relativePath]).toBe(computeHash(content));
+    }
+
+    const architecturePath = ".claude/agents/trellis-code-architecture-review.md";
+    const architectureContent = fs.readFileSync(
+      path.join(tmpDir, architecturePath),
+      "utf-8",
+    );
+    expect(architectureContent).toContain("model: opus");
+    expect(hashes[architecturePath]).toBe(computeHash(architectureContent));
+
+    const implementContent = fs.readFileSync(
+      path.join(tmpDir, ".claude/agents/trellis-implement.md"),
+      "utf-8",
+    );
+    expect(implementContent).not.toMatch(/^model:/m);
+  });
+
   it("#3 multi platform creates all selected platform directories", async () => {
     await init({ yes: true, claude: true, cursor: true, opencode: true });
 

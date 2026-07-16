@@ -3,7 +3,7 @@ name: trellis-merge-review
 description: |
   Merge review gate for Claude Code. Verifies the merged result is complete, conflict-free, and aligned with task acceptance criteria before build/test runs, then reports blocking issues to the main session.
 tools: Read, Bash, Glob, Grep, mcp__exa__web_search_exa, mcp__exa__get_code_context_exa
-model: opus
+model: sonnet
 ---
 # Merge Review Agent
 

@@ -95,10 +95,17 @@ describe("getAllAgents", () => {
     );
   });
 
-  it("Claude review-gate agents are read-only Opus gates", () => {
+  it("uses the configured model matrix and keeps review gates read-only", () => {
     const agents = new Map(
       getAllAgents().map((agent) => [agent.name, agent.content]),
     );
+    const sonnetAgentNames = [
+      "trellis-research",
+      "trellis-check",
+      "trellis-spec-review",
+      "trellis-code-review",
+      "trellis-merge-review",
+    ];
     const reviewGateNames = [
       "trellis-spec-review",
       "trellis-code-review",
@@ -106,10 +113,21 @@ describe("getAllAgents", () => {
       "trellis-merge-review",
     ];
 
+    for (const name of sonnetAgentNames) {
+      expect(agents.get(name)).toContain("model: sonnet");
+    }
+    expect(agents.get("trellis-code-architecture-review")).toContain(
+      "model: opus",
+    );
+
+    const opusAgentNames = [...agents]
+      .filter(([, content]) => content.includes("model: opus"))
+      .map(([name]) => name);
+    expect(opusAgentNames).toEqual(["trellis-code-architecture-review"]);
+
     for (const name of reviewGateNames) {
       const content = agents.get(name);
       expect(content).toBeDefined();
-      expect(content).toContain("model: opus");
       expect(content).toContain("tools: Read, Bash, Glob, Grep");
       expect(content).not.toContain("Write");
       expect(content).not.toContain("Edit");
@@ -127,6 +145,7 @@ describe("getAllAgents", () => {
 
     expect(implementContent).toBeDefined();
     expect(implementContent).toContain("permissionMode: acceptEdits");
+    expect(implementContent).not.toMatch(/^model:/m);
     expect(checkContent).toBeDefined();
     expect(checkContent).not.toContain("permissionMode: acceptEdits");
   });

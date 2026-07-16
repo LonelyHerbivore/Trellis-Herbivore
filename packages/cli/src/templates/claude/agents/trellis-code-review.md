@@ -3,7 +3,7 @@ name: trellis-code-review
 description: |
   Code review gate for Claude Code. Reviews logic, correctness, tests, and code quality, then reports blocking issues to the main session.
 tools: Read, Bash, Glob, Grep, mcp__exa__web_search_exa, mcp__exa__get_code_context_exa
-model: opus
+model: sonnet
 ---
 # Code Review Agent
 

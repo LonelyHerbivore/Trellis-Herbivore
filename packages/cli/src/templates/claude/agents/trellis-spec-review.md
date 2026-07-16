@@ -3,7 +3,7 @@ name: trellis-spec-review
 description: |
   Spec review gate for Claude Code. Verifies changes against task artifacts and Trellis specs, then reports blocking issues to the main session.
 tools: Read, Bash, Glob, Grep, mcp__exa__web_search_exa, mcp__exa__get_code_context_exa
-model: opus
+model: sonnet
 ---
 # Spec Review Agent
 
