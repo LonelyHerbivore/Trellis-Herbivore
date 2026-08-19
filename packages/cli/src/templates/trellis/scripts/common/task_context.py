@@ -22,8 +22,9 @@ import json
 from pathlib import Path
 
 from .log import Colors, colored
-from .paths import get_repo_root
+from .paths import FILE_TASK_JSON, get_repo_root
 from .task_utils import resolve_task_dir
+from .task_workflow import validate_task_record
 
 
 # =============================================================================
@@ -85,7 +86,7 @@ def cmd_add_context(args: argparse.Namespace) -> int:
 # =============================================================================
 
 def cmd_validate(args: argparse.Namespace) -> int:
-    """Validate JSONL context files."""
+    """Validate task workflow state and JSONL context files."""
     repo_root = get_repo_root()
     target_dir = resolve_task_dir(args.dir, repo_root)
 
@@ -97,7 +98,7 @@ def cmd_validate(args: argparse.Namespace) -> int:
     print(f"Target dir: {target_dir}")
     print()
 
-    total_errors = 0
+    total_errors = _validate_task_json(target_dir / FILE_TASK_JSON)
     for jsonl_name in ["implement.jsonl", "check.jsonl"]:
         jsonl_file = target_dir / jsonl_name
         errors = _validate_jsonl(jsonl_file, repo_root)
@@ -110,6 +111,34 @@ def cmd_validate(args: argparse.Namespace) -> int:
     else:
         print(colored(f"✗ Validation failed ({total_errors} errors)", Colors.RED))
         return 1
+
+
+def _validate_task_json(task_json: Path) -> int:
+    """Validate task.json, including its optional structured workflow state."""
+    if not task_json.is_file():
+        print(f"  {colored('task.json: not found', Colors.RED)}")
+        return 1
+
+    try:
+        data = json.loads(task_json.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        print(f"  {colored('task.json: invalid JSON', Colors.RED)}")
+        return 1
+
+    errors = validate_task_record(data)
+    if errors:
+        for error in errors:
+            print(f"  {colored(f'task.json: {error}', Colors.RED)}")
+        return len(errors)
+
+    if isinstance(data, dict) and "workflow" not in data:
+        state = "legacy workflow accepted"
+    elif isinstance(data, dict) and data.get("workflow") == {"selection_status": "unselected"}:
+        state = "workflow selection is unselected"
+    else:
+        state = "explicit workflow selection is valid"
+    print(f"  {colored(f'task.json: ✓ ({state})', Colors.GREEN)}")
+    return 0
 
 
 def _validate_jsonl(jsonl_file: Path, repo_root: Path) -> int:

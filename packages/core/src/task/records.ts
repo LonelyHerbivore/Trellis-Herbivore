@@ -5,6 +5,7 @@ import {
   TASK_RECORD_FIELD_ORDER,
   emptyTaskRecord,
   isPlainObject,
+  parseTaskWorkflow,
   taskRecordSchema,
   type TrellisTaskRecord,
 } from "./schema.js";
@@ -30,11 +31,12 @@ export interface WriteTaskRecordOptions {
 /**
  * Read a task.json file and return a canonicalized record.
  *
- * Unknown fields on disk that are not part of the canonical 24-field
- * shape are NOT returned — `loadTaskRecord` is the structured public API.
- * To preserve unknown fields across a load/write cycle, callers should
- * use {@link writeTaskRecord}, which merges canonical updates on top of
- * the on-disk JSON object instead of overwriting it.
+ * The optional `workflow` field is returned when present; its absence means a
+ * legacy task. Other unknown fields on disk are NOT returned —
+ * `loadTaskRecord` is the structured public API. To preserve unknown fields
+ * across a load/write cycle, callers should use {@link writeTaskRecord}, which
+ * merges canonical updates on top of the on-disk JSON object instead of
+ * overwriting it.
  */
 export function loadTaskRecord(
   options: LoadTaskRecordOptions,
@@ -53,13 +55,14 @@ export function loadTaskRecord(
 }
 
 /**
- * Write a task.json file with canonical field ordering. Unknown fields
- * already present on disk are preserved verbatim — only the canonical
- * fields are overwritten by `record`. Field order: canonical fields
- * first (in `TASK_RECORD_FIELD_ORDER`), then any preserved unknown
- * fields in their original insertion order. If an existing `task.json` is
- * present but cannot be parsed as a JSON object, the write is rejected instead
- * of silently replacing potentially recoverable local data.
+ * Write a task.json file with deterministic field ordering. The 24 required
+ * legacy fields are written first, followed by `workflow` when the supplied
+ * record carries it. A legacy caller that omits `workflow` does not cause an
+ * existing workflow state to be dropped. Other unknown fields already present
+ * on disk are preserved verbatim in their original insertion order. If an
+ * existing `task.json` is present but cannot be parsed as a JSON object, the
+ * write is rejected instead of silently replacing potentially recoverable
+ * local data.
  *
  * The directory containing `task.json` is created if it does not exist.
  */
@@ -75,6 +78,21 @@ export function writeTaskRecord(options: WriteTaskRecordOptions): void {
   for (const field of TASK_RECORD_FIELD_ORDER) {
     out[field] = recordBag[field];
   }
+
+  let workflow = record.workflow;
+  if (
+    workflow === undefined &&
+    existing &&
+    Object.prototype.hasOwnProperty.call(existing, "workflow")
+  ) {
+    // Preserve a state written by a newer/parallel caller when a legacy
+    // consumer only updates one of the original 24 fields.
+    workflow = parseTaskWorkflow(existing.workflow, record.worktree_path);
+  }
+  if (workflow !== undefined) {
+    out.workflow = workflow;
+  }
+
   if (existing) {
     for (const key of Object.keys(existing)) {
       if (!(key in out)) {

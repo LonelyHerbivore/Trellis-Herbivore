@@ -10,6 +10,11 @@
 - 当前已经在 worktree 时复用它；兼容旧 `.claude/worktree` 和 task 已记录路径。
 - 所有 agent dispatch 显式携带 task 和 worktree 路径，并连接 sync、runtime bundle、snapshot、base branch 与最终合并。
 
+## 通用工程约束
+
+- 只为已确认的阶段需求增加内容；除非已有调用路径或 PRD 明确证明必要，不增加面向假设场景的抽象、配置、兼容分支、兜底逻辑或重复校验。
+- 阶段验收与架构审查必须核查新增代码和测试是否直接支撑需求；发现未被需求或实际调用证明的复杂度时，删除或记录其必要性。
+
 ## 验收标准
 
 - [ ] 四种选择场景、跨宿主/agent 同路径和 `fork_turns="none"` 恢复均有测试。

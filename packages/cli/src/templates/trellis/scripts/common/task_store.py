@@ -53,6 +53,7 @@ from .task_utils import (
     resolve_task_dir,
     run_task_hooks,
 )
+from .task_workflow import new_unselected_workflow
 
 
 # =============================================================================
@@ -255,6 +256,7 @@ def cmd_create(args: argparse.Namespace) -> int:
         "relatedFiles": [],
         "notes": "",
         "meta": {},
+        "workflow": new_unselected_workflow(),
     }
 
     write_json(task_json_path, task_data)

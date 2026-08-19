@@ -2,14 +2,42 @@ import { describe, expect, it } from "vitest";
 
 import {
   TASK_RECORD_FIELD_ORDER,
+  WORKFLOW_REVIEW_GATES,
   emptyTaskRecord,
   taskRecordSchema,
 } from "../../src/task/index.js";
+import type { TrellisTaskWorkflow } from "../../src/task/index.js";
+
+function explicitWorkflow(): TrellisTaskWorkflow {
+  return {
+    contract: "explicit-selection-v1",
+    host: "codex",
+    execution_mode: "main-session",
+    worktree_mode: "current-checkout",
+    development_flow: "default",
+    review_gates: {
+      enabled: ["spec-review", "code-review"],
+      disabled: ["code-architecture-review", "merge-review"],
+      runs: {
+        "spec-review": {
+          status: "PASS",
+          attempts: 1,
+          report_path: "reports/spec-review.md",
+        },
+        "code-review": {
+          status: "pending",
+          attempts: 0,
+          report_path: null,
+        },
+      },
+    },
+  };
+}
 
 describe("emptyTaskRecord", () => {
-  it("emits every canonical field in canonical order", () => {
+  it("emits legacy fields in canonical order followed by unselected workflow", () => {
     const record = emptyTaskRecord();
-    expect(Object.keys(record)).toEqual([...TASK_RECORD_FIELD_ORDER]);
+    expect(Object.keys(record)).toEqual([...TASK_RECORD_FIELD_ORDER, "workflow"]);
   });
 
   it("uses canonical defaults: planning status, P2 priority, today ISO date", () => {
@@ -21,6 +49,7 @@ describe("emptyTaskRecord", () => {
     expect(record.children).toEqual([]);
     expect(record.relatedFiles).toEqual([]);
     expect(record.meta).toEqual({});
+    expect(record.workflow).toEqual({ selection_status: "unselected" });
     expect(record.createdAt).toMatch(/^\d{4}-\d{2}-\d{2}$/);
   });
 
@@ -71,6 +100,31 @@ describe("taskRecordSchema", () => {
     expect(parsed).not.toBe(input);
   });
 
+  it("reads a 24-field record without workflow as legacy", () => {
+    const legacy = { ...emptyTaskRecord({ id: "legacy" }) } as Record<
+      string,
+      unknown
+    >;
+    delete legacy.workflow;
+
+    const parsed = taskRecordSchema.parse(legacy);
+    expect(parsed.id).toBe("legacy");
+    expect(parsed.workflow).toBeUndefined();
+    expect("workflow" in parsed).toBe(false);
+  });
+
+  it("parses a complete explicit workflow selection", () => {
+    const input = emptyTaskRecord({
+      id: "selected",
+      worktree_path: "D:/repo",
+      workflow: explicitWorkflow(),
+    });
+
+    const parsed = taskRecordSchema.parse(input);
+    expect(parsed.workflow).toEqual(explicitWorkflow());
+    expect(parsed.workflow).not.toBe(input.workflow);
+  });
+
   it("rejects non-object inputs", () => {
     expect(() => taskRecordSchema.parse("nope")).toThrow(/must be a JSON object/);
     expect(() => taskRecordSchema.parse(null)).toThrow();
@@ -110,6 +164,95 @@ describe("taskRecordSchema", () => {
     );
   });
 
+  it("rejects incomplete or ambiguous workflow selections", () => {
+    expect(() =>
+      taskRecordSchema.parse({
+        ...emptyTaskRecord(),
+        workflow: { selection_status: "unselected", host: "codex" },
+      }),
+    ).toThrow(/task.workflow must contain exactly: selection_status/);
+
+    expect(() =>
+      taskRecordSchema.parse({
+        ...emptyTaskRecord({ worktree_path: "D:/repo" }),
+        workflow: {
+          contract: "explicit-selection-v1",
+          execution_mode: "main-session",
+          worktree_mode: "current-checkout",
+          development_flow: "default",
+          review_gates: explicitWorkflow().review_gates,
+        },
+      }),
+    ).toThrow(/task.workflow must contain exactly/);
+
+    expect(() =>
+      taskRecordSchema.parse({
+        ...emptyTaskRecord({ workflow: explicitWorkflow() }),
+      }),
+    ).toThrow(/requires task.worktree_path to be a non-empty string/);
+  });
+
+  it("requires enabled and disabled review gates to form the fixed partition", () => {
+    const workflow = explicitWorkflow();
+    workflow.review_gates.disabled = ["code-review", "merge-review"];
+    expect(() =>
+      taskRecordSchema.parse({
+        ...emptyTaskRecord({ worktree_path: "D:/repo" }),
+        workflow,
+      }),
+    ).toThrow(/must partition every workflow review gate exactly once/);
+
+    expect(WORKFLOW_REVIEW_GATES).toEqual([
+      "spec-review",
+      "code-review",
+      "code-architecture-review",
+      "merge-review",
+    ]);
+  });
+
+  it("rejects runs for disabled gates and invalid run details", () => {
+    const disabledRun = explicitWorkflow();
+    disabledRun.review_gates.runs["merge-review"] = {
+      status: "PASS",
+      attempts: 1,
+      report_path: "reports/merge.md",
+    };
+    expect(() =>
+      taskRecordSchema.parse({
+        ...emptyTaskRecord({ worktree_path: "D:/repo" }),
+        workflow: disabledRun,
+      }),
+    ).toThrow(/runs must contain exactly the enabled review gates/);
+
+    for (const reportPath of ["../report.md", "reports/../report.md", "C:\\report.md"]) {
+      const invalidPath = explicitWorkflow();
+      invalidPath.review_gates.runs["spec-review"] = {
+        status: "FAIL",
+        attempts: 2,
+        report_path: reportPath,
+      };
+      expect(() =>
+        taskRecordSchema.parse({
+          ...emptyTaskRecord({ worktree_path: "D:/repo" }),
+          workflow: invalidPath,
+        }),
+      ).toThrow(/report_path must be a task-relative path or null/);
+    }
+
+    const invalidAttempts = explicitWorkflow();
+    invalidAttempts.review_gates.runs["spec-review"] = {
+      status: "PASS",
+      attempts: -1,
+      report_path: null,
+    };
+    expect(() =>
+      taskRecordSchema.parse({
+        ...emptyTaskRecord({ worktree_path: "D:/repo" }),
+        workflow: invalidAttempts,
+      }),
+    ).toThrow(/attempts must be a non-negative integer/);
+  });
+
   it("allows null for nullable string fields", () => {
     const parsed = taskRecordSchema.parse({
       ...emptyTaskRecord(),
@@ -132,12 +275,17 @@ describe("taskRecordSchema", () => {
     }
   });
 
-  it("drops unknown fields from the structured output (load surface)", () => {
+  it("drops unknown fields while retaining the recognized workflow state", () => {
     const parsed = taskRecordSchema.parse({
-      ...emptyTaskRecord({ id: "x" }),
+      ...emptyTaskRecord({
+        id: "x",
+        worktree_path: "D:/repo",
+        workflow: explicitWorkflow(),
+      }),
       // @ts-expect-error - simulate older/newer on-disk field
       legacy_field: "keep-me-on-disk",
     });
     expect("legacy_field" in parsed).toBe(false);
+    expect(parsed.workflow?.contract).toBe("explicit-selection-v1");
   });
 });

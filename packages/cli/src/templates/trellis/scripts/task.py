@@ -6,7 +6,7 @@ Task Management Script.
 Usage:
     python3 task.py create "<title>" [--slug <name>] [--assignee <dev>] [--priority P0|P1|P2|P3] [--parent <dir>] [--package <pkg>]
     python3 task.py add-context <dir> <file> <path> [reason] # Add jsonl entry
-    python3 task.py validate <dir>              # Validate jsonl files
+    python3 task.py validate <dir>              # Validate task state and jsonl files
     python3 task.py list-context <dir>          # List jsonl entries
     python3 task.py start <dir>                 # Set active task
     python3 task.py current [--source]          # Show active task
@@ -308,7 +308,7 @@ Usage:
   python3 task.py create <title> --package <pkg>     Create task for a specific package
   python3 task.py create <title> --parent <dir>      Create task as child of parent
   python3 task.py add-context <dir> <jsonl> <path> [reason]  Add entry to jsonl
-  python3 task.py validate <dir>                     Validate jsonl files
+  python3 task.py validate <dir>                     Validate task state and jsonl files
   python3 task.py list-context <dir>                 List jsonl entries
   python3 task.py start <dir>                        Set active task
   python3 task.py current [--source]                 Show active task
@@ -407,7 +407,9 @@ def main() -> int:
     p_add.add_argument("reason", nargs="?", help="Reason for adding")
 
     # validate
-    p_validate = subparsers.add_parser("validate", help="Validate context files")
+    p_validate = subparsers.add_parser(
+        "validate", help="Validate task state and context files"
+    )
     p_validate.add_argument("dir", help="Task directory")
 
     # list-context

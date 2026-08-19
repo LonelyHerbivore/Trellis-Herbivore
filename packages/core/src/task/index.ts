@@ -4,12 +4,20 @@
 // Task API is intentionally independent from the channel API.
 
 export type {
+  ExplicitTaskWorkflow,
   TrellisTaskRecord,
+  TrellisTaskWorkflow,
   TaskRecordField,
+  UnselectedTaskWorkflow,
+  WorkflowGateRun,
+  WorkflowGateStatus,
+  WorkflowReviewGate,
+  WorkflowReviewGateSelection,
 } from "./schema.js";
 
 export {
   TASK_RECORD_FIELD_ORDER,
+  WORKFLOW_REVIEW_GATES,
   emptyTaskRecord,
   taskRecordSchema,
 } from "./schema.js";

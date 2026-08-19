@@ -11,6 +11,11 @@
 - 执行最小 task -> planning -> strategy -> implement -> reviews -> merge-review -> final validation 流程。
 - 检查开发机绝对路径、Windows/Linux 路径和换行符。
 
+## 通用工程约束
+
+- 只为已确认的阶段需求增加内容；除非已有调用路径或 PRD 明确证明必要，不增加面向假设场景的抽象、配置、兼容分支、兜底逻辑或重复校验。
+- 阶段验收与架构审查必须核查新增代码和测试是否直接支撑需求；发现未被需求或实际调用证明的复杂度时，删除或记录其必要性。
+
 ## 验收标准
 
 - [ ] build、test、typecheck、lint、pack、tarball 清单和 clean-install consumer E2E 通过。

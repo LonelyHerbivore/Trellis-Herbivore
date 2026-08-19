@@ -10,6 +10,11 @@
 - 每个 agent 从 task record 读取 worktree 和 gate 选择，输出统一 PASS/FAIL、证据、阻塞项和下一步，并落盘至 `.trellis/`。
 - shared workflow 按 spec -> code -> architecture 顺序执行 enabled gate；FAIL 由主 agent 修复并重跑当前 gate；inline 不隐式跳过。
 
+## 通用工程约束
+
+- 只为已确认的阶段需求增加内容；除非已有调用路径或 PRD 明确证明必要，不增加面向假设场景的抽象、配置、兼容分支、兜底逻辑或重复校验。
+- 阶段验收与架构审查必须核查新增代码和测试是否直接支撑需求；发现未被需求或实际调用证明的复杂度时，删除或记录其必要性。
+
 ## 验收标准
 
 - [ ] inventory、权限、prelude、递归防护和输出合同测试通过。

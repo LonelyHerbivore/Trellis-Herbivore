@@ -11,6 +11,11 @@
 - 增加 cc-switch 优先、Codex config fallback 的 `default_mode_request_user_input` 检查/补齐逻辑，保留用户其他设置。
 - 检测 hooks 前置条件，hooks 不可用时由 `AGENTS.md` 和 `trellis-start` 降级。
 
+## 通用工程约束
+
+- 只为已确认的阶段需求增加内容；除非已有调用路径或 PRD 明确证明必要，不增加面向假设场景的抽象、配置、兼容分支、兜底逻辑或重复校验。
+- 阶段验收与架构审查必须核查新增代码和测试是否直接支撑需求；发现未被需求或实际调用证明的复杂度时，删除或记录其必要性。
+
 ## 验收标准
 
 - [ ] skills 在 source、dist、tarball 和目标项目均可达。

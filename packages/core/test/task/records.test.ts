@@ -37,6 +37,7 @@ describe("loadTaskRecord / writeTaskRecord", () => {
     expect(Object.keys(parsed).slice(0, TASK_RECORD_FIELD_ORDER.length)).toEqual([
       ...TASK_RECORD_FIELD_ORDER,
     ]);
+    expect(parsed.workflow).toEqual({ selection_status: "unselected" });
     expect(raw.endsWith("\n")).toBe(true);
   });
 
@@ -71,6 +72,72 @@ describe("loadTaskRecord / writeTaskRecord", () => {
     expect(() => loadTaskRecord({ taskDir: dir })).toThrow(
       /task.assignee is required/,
     );
+  });
+
+  it("keeps legacy records legacy across a load/write cycle", () => {
+    const dir = path.join(tmp, "05-13-legacy");
+    fs.mkdirSync(dir, { recursive: true });
+    const legacy = { ...emptyTaskRecord({ id: "legacy", name: "legacy" }) } as Record<
+      string,
+      unknown
+    >;
+    delete legacy.workflow;
+    fs.writeFileSync(
+      path.join(dir, "task.json"),
+      JSON.stringify(legacy, null, 2) + "\n",
+      "utf-8",
+    );
+
+    const loaded = loadTaskRecord({ taskDir: dir });
+    expect(loaded.workflow).toBeUndefined();
+    writeTaskRecord({ taskDir: dir, record: loaded });
+
+    const persisted = JSON.parse(
+      fs.readFileSync(path.join(dir, "task.json"), "utf-8"),
+    ) as Record<string, unknown>;
+    expect("workflow" in persisted).toBe(false);
+  });
+
+  it("round-trips an explicit workflow state after the legacy field block", () => {
+    const dir = path.join(tmp, "05-13-explicit-workflow");
+    const record = emptyTaskRecord({
+      id: "workflow",
+      name: "workflow",
+      title: "Workflow",
+      worktree_path: "D:/repo",
+      workflow: {
+        contract: "explicit-selection-v1",
+        host: "claude",
+        execution_mode: "subagent",
+        worktree_mode: "new-worktree",
+        development_flow: "tdd",
+        review_gates: {
+          enabled: ["spec-review"],
+          disabled: [
+            "code-review",
+            "code-architecture-review",
+            "merge-review",
+          ],
+          runs: {
+            "spec-review": {
+              status: "pending",
+              attempts: 0,
+              report_path: null,
+            },
+          },
+        },
+      },
+    });
+    writeTaskRecord({ taskDir: dir, record });
+
+    const persisted = JSON.parse(
+      fs.readFileSync(path.join(dir, "task.json"), "utf-8"),
+    ) as Record<string, unknown>;
+    expect(Object.keys(persisted).slice(0, TASK_RECORD_FIELD_ORDER.length)).toEqual([
+      ...TASK_RECORD_FIELD_ORDER,
+    ]);
+    expect(Object.keys(persisted)[TASK_RECORD_FIELD_ORDER.length]).toBe("workflow");
+    expect(loadTaskRecord({ taskDir: dir })).toEqual(record);
   });
 
   it("writeTaskRecord rejects incomplete records before touching disk", () => {
@@ -145,11 +212,12 @@ describe("loadTaskRecord / writeTaskRecord", () => {
     });
     expect(raw.legacy_flag).toBe(true);
 
-    // Canonical fields come first, unknown fields trail in original order.
+    // Legacy fields and recognized workflow come first, unknown fields trail.
     const keys = Object.keys(raw);
     const canonicalCount = TASK_RECORD_FIELD_ORDER.length;
     expect(keys.slice(0, canonicalCount)).toEqual([...TASK_RECORD_FIELD_ORDER]);
     expect(keys.slice(canonicalCount)).toEqual([
+      "workflow",
       "external_tracker",
       "legacy_flag",
     ]);

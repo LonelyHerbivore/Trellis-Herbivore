@@ -49,6 +49,7 @@ class TaskData(TypedDict, total=False):
     relatedFiles: list[str]
     notes: str
     meta: dict
+    workflow: dict
 
 
 # =============================================================================
@@ -91,6 +92,12 @@ class TaskInfo:
     @property
     def meta(self) -> dict:
         return self.raw.get("meta", {})
+
+    @property
+    def workflow(self) -> dict | None:
+        """Optional structured workflow state; None means a legacy task."""
+        value = self.raw.get("workflow")
+        return value if isinstance(value, dict) else None
 
 
 # =============================================================================

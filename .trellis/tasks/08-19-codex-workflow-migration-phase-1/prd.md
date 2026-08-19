@@ -18,9 +18,14 @@
 - review gates 固定为 `spec-review`、`code-review`、`code-architecture-review`、`merge-review`。每一个 gate 必须显式位于 enabled 或 disabled 列表之一；已启用 gate 才能具有 pending/PASS/FAIL/skipped、attempts 和 report path 状态。
 - 阶段 1 只建立数据合同、读写和验证，不修改阶段 2 以后的入口、init/update、agent prompt、review 执行或 worktree 创建行为。
 
+## 通用工程约束
+
+- 只为已确认的阶段需求增加内容；除非已有调用路径或 PRD 明确证明必要，不增加面向假设场景的抽象、配置、兼容分支、兜底逻辑或重复校验。
+- 阶段验收与架构审查必须核查新增代码和测试是否直接支撑需求；发现未被需求或实际调用证明的复杂度时，删除或记录其必要性。
+
 ## 验收标准
 
-- [ ] 新旧 fixture 读写和 schema 测试通过。
-- [ ] CLI 生命周期与 Core record 一致。
-- [ ] 非法 gate 依赖、缺少选择列表和 worktree 不一致均被拒绝。
-- [ ] Claude 与 Codex 对同一 task 的恢复语义一致。
+- [x] 新旧 fixture 读写和 schema 测试通过。
+- [x] CLI 生命周期与 Core record 一致。
+- [x] 非法 gate 依赖、缺少选择列表和 worktree 不一致均被拒绝。
+- [x] Claude 与 Codex 对同一 task 的恢复语义一致。
