@@ -36,6 +36,18 @@ import { execSync } from "node:child_process";
 // eslint-disable-next-line @typescript-eslint/no-empty-function
 const noop = () => {};
 
+function readTrackedHashes(cwd: string): Record<string, string> {
+  const hashPath = path.join(
+    cwd,
+    DIR_NAMES.WORKFLOW,
+    ".template-hashes.json",
+  );
+  const parsed = JSON.parse(fs.readFileSync(hashPath, "utf-8")) as {
+    hashes?: Record<string, string>;
+  };
+  return parsed.hashes ?? {};
+}
+
 describe("init() integration", () => {
   let tmpDir: string;
 
@@ -373,23 +385,120 @@ describe("init() integration", () => {
 
     const agentsPath = path.join(tmpDir, FILE_NAMES.AGENTS);
     const agentsBefore = fs.readFileSync(agentsPath, "utf-8");
+    const codexAgentRelative = ".codex/agents/trellis-check.toml";
+    const codexAgentPath = path.join(
+      tmpDir,
+      ...codexAgentRelative.split("/"),
+    );
+    const codexAgentBefore = fs.readFileSync(codexAgentPath, "utf-8");
+    const hashesBefore = readTrackedHashes(tmpDir);
+    const codexAgentHashBefore = hashesBefore[codexAgentRelative];
+    expect(codexAgentHashBefore).toBe(computeHash(codexAgentBefore));
     expect(fs.existsSync(path.join(tmpDir, FILE_NAMES.CLAUDE))).toBe(false);
 
     await init({ yes: true, claude: true });
 
     expect(fs.readFileSync(agentsPath, "utf-8")).toBe(agentsBefore);
+    expect(fs.readFileSync(codexAgentPath, "utf-8")).toBe(codexAgentBefore);
+    expect(fs.existsSync(path.join(tmpDir, ".claude"))).toBe(true);
     expect(fs.existsSync(path.join(tmpDir, FILE_NAMES.CLAUDE))).toBe(true);
     expect(
       fs.readFileSync(path.join(tmpDir, FILE_NAMES.CLAUDE), "utf-8"),
     ).toBe(agentsBefore);
 
-    const hashesFile = JSON.parse(
-      fs.readFileSync(
-        path.join(tmpDir, DIR_NAMES.WORKFLOW, ".template-hashes.json"),
-        "utf-8",
-      ),
-    ) as { hashes?: Record<string, string> };
-    expect(hashesFile.hashes).toHaveProperty(FILE_NAMES.CLAUDE);
+    const hashesAfter = readTrackedHashes(tmpDir);
+    expect(hashesAfter).toHaveProperty(FILE_NAMES.CLAUDE);
+    expect(hashesAfter[codexAgentRelative]).toBe(codexAgentHashBefore);
+  });
+
+  it("#3b2 Claude to Codex incremental init adds Codex assets and preserves Claude hashes", async () => {
+    await init({ yes: true, claude: true, user: "claude-user" });
+
+    const claudeAgentRelative = ".claude/agents/trellis-check.md";
+    const claudeAgentPath = path.join(
+      tmpDir,
+      ...claudeAgentRelative.split("/"),
+    );
+    const claudeAgentBefore = fs.readFileSync(claudeAgentPath, "utf-8");
+    const hashesBefore = readTrackedHashes(tmpDir);
+    const claudeAgentHashBefore = hashesBefore[claudeAgentRelative];
+    expect(claudeAgentHashBefore).toBe(computeHash(claudeAgentBefore));
+
+    await init({ yes: true, codex: true });
+
+    const codexAgentRelative = ".codex/agents/trellis-check.toml";
+    const codexAgentPath = path.join(
+      tmpDir,
+      ...codexAgentRelative.split("/"),
+    );
+    expect(fs.existsSync(codexAgentPath)).toBe(true);
+    expect(fs.readFileSync(claudeAgentPath, "utf-8")).toBe(claudeAgentBefore);
+
+    const hashesAfter = readTrackedHashes(tmpDir);
+    expect(hashesAfter[claudeAgentRelative]).toBe(claudeAgentHashBefore);
+    expect(hashesAfter[codexAgentRelative]).toBe(
+      computeHash(fs.readFileSync(codexAgentPath, "utf-8")),
+    );
+  });
+
+  it("#3b3 skip-existing recovers a missing Codex template without losing Claude hashes", async () => {
+    await init({ yes: true, claude: true, codex: true });
+
+    const claudeAgentRelative = ".claude/agents/trellis-check.md";
+    const claudeAgentPath = path.join(
+      tmpDir,
+      ...claudeAgentRelative.split("/"),
+    );
+    const claudeAgentBefore = fs.readFileSync(claudeAgentPath, "utf-8");
+    const codexAgentRelative = ".codex/agents/trellis-check.toml";
+    const codexAgentPath = path.join(
+      tmpDir,
+      ...codexAgentRelative.split("/"),
+    );
+    const codexAgentBefore = fs.readFileSync(codexAgentPath, "utf-8");
+    const hashesBefore = readTrackedHashes(tmpDir);
+
+    fs.unlinkSync(codexAgentPath);
+    await init({ yes: true, codex: true, skipExisting: true });
+
+    expect(fs.readFileSync(claudeAgentPath, "utf-8")).toBe(claudeAgentBefore);
+    expect(fs.readFileSync(codexAgentPath, "utf-8")).toBe(codexAgentBefore);
+
+    const hashesAfter = readTrackedHashes(tmpDir);
+    expect(hashesAfter[claudeAgentRelative]).toBe(
+      hashesBefore[claudeAgentRelative],
+    );
+    expect(hashesAfter[codexAgentRelative]).toBe(
+      computeHash(codexAgentBefore),
+    );
+  });
+
+  it("#3b4 force-adding Codex keeps existing Claude template hashes", async () => {
+    await init({ yes: true, claude: true });
+
+    const claudeAgentRelative = ".claude/agents/trellis-check.md";
+    const claudeAgentPath = path.join(
+      tmpDir,
+      ...claudeAgentRelative.split("/"),
+    );
+    const claudeAgentBefore = fs.readFileSync(claudeAgentPath, "utf-8");
+    const hashesBefore = readTrackedHashes(tmpDir);
+
+    await init({ yes: true, codex: true, force: true });
+
+    const codexAgentPath = path.join(
+      tmpDir,
+      ".codex",
+      "agents",
+      "trellis-check.toml",
+    );
+    expect(fs.existsSync(codexAgentPath)).toBe(true);
+    expect(fs.readFileSync(claudeAgentPath, "utf-8")).toBe(claudeAgentBefore);
+
+    const hashesAfter = readTrackedHashes(tmpDir);
+    expect(hashesAfter[claudeAgentRelative]).toBe(
+      hashesBefore[claudeAgentRelative],
+    );
   });
 
   it("#3c kiro platform creates .kiro/skills", async () => {

@@ -530,6 +530,65 @@ describe("update() integration", () => {
     expect(fs.existsSync(projectFile(FILE_NAMES.CLAUDE))).toBe(false);
   });
 
+  it("#4i updates Claude and Codex templates without touching runtime data", async () => {
+    await init({ yes: true, force: true, claude: true, codex: true });
+
+    const claudeAgent = ".claude/agents/trellis-check.md";
+    const codexAgent = ".codex/agents/trellis-check.toml";
+    const claudeTemplate = readProjectFile(claudeAgent);
+    const codexTemplate = readProjectFile(codexAgent);
+    const oldClaudeAgent = `${claudeTemplate}\n<!-- older template -->\n`;
+    const oldCodexAgent = `${codexTemplate}\n# older template\n`;
+    writeProjectFile(claudeAgent, oldClaudeAgent);
+    writeProjectFile(codexAgent, oldCodexAgent);
+
+    const hashes = readHashesV2(hashFilePath());
+    hashes[claudeAgent] = computeHash(oldClaudeAgent);
+    hashes[codexAgent] = computeHash(oldCodexAgent);
+    writeHashesV2(hashFilePath(), hashes);
+
+    const claudeRuntime = ".claude/projects/user-session.jsonl";
+    const codexRuntime = ".codex/sessions/user-session.jsonl";
+    writeProjectFile(claudeRuntime, "claude runtime\n");
+    writeProjectFile(codexRuntime, "codex runtime\n");
+
+    await update({});
+
+    expect(readProjectFile(claudeAgent)).toBe(claudeTemplate);
+    expect(readProjectFile(codexAgent)).toBe(codexTemplate);
+    expect(readProjectFile(claudeRuntime)).toBe("claude runtime\n");
+    expect(readProjectFile(codexRuntime)).toBe("codex runtime\n");
+  });
+
+  it("#4j upgrades legacy Codex only when Codex command skills are tracked", async () => {
+    await init({ yes: true, force: true, codex: true });
+
+    fs.rmSync(projectFile(".codex"), { recursive: true, force: true });
+    const legacyHashes = Object.fromEntries(
+      Object.entries(readHashesV2(hashFilePath())).filter(
+        ([relativePath]) => !relativePath.startsWith(".codex/"),
+      ),
+    );
+    writeHashesV2(hashFilePath(), legacyHashes);
+
+    await update({ force: true });
+
+    expect(
+      fs.existsSync(projectFile(".codex/agents/trellis-check.toml")),
+    ).toBe(true);
+  });
+
+  it("#4k shared Gemini skills do not trigger a Codex legacy upgrade", async () => {
+    await init({ yes: true, force: true, gemini: true });
+
+    expect(fs.existsSync(projectFile(".agents/skills"))).toBe(true);
+    expect(fs.existsSync(projectFile(".codex"))).toBe(false);
+
+    await update({ force: true });
+
+    expect(fs.existsSync(projectFile(".codex"))).toBe(false);
+  });
+
   it("#5 force overwrites user-modified files", async () => {
     await setupProject();
 

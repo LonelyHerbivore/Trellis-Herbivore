@@ -1876,7 +1876,13 @@ export async function init(options: InitOptions): Promise<void> {
   }
 
   // Initialize template hashes for modification tracking
-  const hashedCount = initializeHashes(cwd, { trackedPaths: writtenPaths });
+  const hashedCount = initializeHashes(cwd, {
+    trackedPaths: writtenPaths,
+    // Force and skip-existing use this full path even for an existing project.
+    // Preserve unselected platforms' hashes so update can still recognize
+    // their pristine templates after this run.
+    merge: !isFirstInit,
+  });
   if (hashedCount > 0) {
     console.log(
       chalk.gray(`📋 Tracking ${hashedCount} template files for updates`),
