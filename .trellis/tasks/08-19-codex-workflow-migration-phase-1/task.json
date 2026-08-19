@@ -1,0 +1,32 @@
+{
+  "id": "codex-workflow-migration-phase-1",
+  "name": "codex-workflow-migration-phase-1",
+  "title": "Codex 工作流无缝迁移 - 阶段 1：结构化任务状态与跨会话恢复",
+  "description": "",
+  "status": "planning",
+  "dev_type": null,
+  "scope": null,
+  "package": null,
+  "priority": "P1",
+  "creator": "codex",
+  "assignee": "codex",
+  "createdAt": "2026-08-19",
+  "completedAt": null,
+  "branch": "task/codex-workflow-seamless-migration",
+  "base_branch": "main",
+  "worktree_path": "D:\\Trellis\\Trellis-0.6.0-beta.17",
+  "commit": null,
+  "pr_url": null,
+  "subtasks": [],
+  "children": [],
+  "parent": "08-19-codex-workflow-seamless-migration",
+  "relatedFiles": [],
+  "notes": "协调会话负责编排和收敛；实施、测试和独立 review 由明确文件边界的执行 agent 完成。",
+  "meta": {
+    "host_platform": "codex",
+    "execution_mode": "subagent-orchestrated",
+    "worktree_selection": "current_checkout",
+    "development_flow": "default",
+    "review_gate_selection": { "spec-review": "enabled", "code-review": "enabled", "code-architecture-review": "enabled", "merge-review": "enabled" }
+  }
+}

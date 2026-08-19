@@ -1,0 +1,49 @@
+{
+  "id": "codex-workflow-seamless-migration",
+  "name": "codex-workflow-seamless-migration",
+  "title": "Codex 工作流无缝迁移",
+  "description": "",
+  "status": "planning",
+  "dev_type": null,
+  "scope": null,
+  "package": null,
+  "priority": "P1",
+  "creator": "codex",
+  "assignee": "codex",
+  "createdAt": "2026-08-19",
+  "completedAt": null,
+  "branch": "task/codex-workflow-seamless-migration",
+  "base_branch": "main",
+  "worktree_path": "D:\\Trellis\\Trellis-0.6.0-beta.17",
+  "commit": null,
+  "pr_url": null,
+  "subtasks": [],
+  "children": [
+    "08-19-codex-workflow-migration-phase-0",
+    "08-19-codex-workflow-migration-phase-1",
+    "08-19-codex-workflow-migration-phase-2",
+    "08-19-codex-workflow-migration-phase-3",
+    "08-19-codex-workflow-migration-phase-4",
+    "08-19-codex-workflow-migration-phase-5",
+    "08-19-codex-workflow-migration-phase-6",
+    "08-19-codex-workflow-migration-phase-7",
+    "08-19-codex-workflow-migration-phase-8",
+    "08-19-codex-workflow-migration-phase-9"
+  ],
+  "parent": null,
+  "relatedFiles": [],
+  "notes": "当前会话仅负责任务编排、需求对齐、调度和结果收敛；产品实现、测试与独立 review 由任务指定的执行 agent 完成。",
+  "meta": {
+    "migration_contract_version": "v1",
+    "host_platform": "codex",
+    "execution_mode": "subagent-orchestrated",
+    "worktree_selection": "current_checkout",
+    "development_flow": "default",
+    "review_gate_selection": {
+      "spec-review": "enabled",
+      "code-review": "enabled",
+      "code-architecture-review": "enabled",
+      "merge-review": "enabled"
+    }
+  }
+}
