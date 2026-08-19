@@ -56,9 +56,8 @@
 
 ## 未解决问题
 
-需要用户确认阶段 4 对用户级配置的权限边界：是只实现检测与提示，还是允许 `trellis init/update` 在获得用户显式确认后修改 cc-switch 数据库或 `~/.codex/config.toml`。
+无。用户已于 2026-08-19 确认：`trellis init/update` 可以在每次显式确认后修改 cc-switch 数据库或 `~/.codex/config.toml`；必须先展示目标、拟写入项和备份方式。
 
 ## 下一阶段前置条件
 
-- 用户确认上述用户级配置写入策略。
 - 阶段 1 开始前读取本交接、父任务 `prd.md`/`design.md`/`implement.md`、阶段 1 `task.json`/`prd.md`、当前 Git 状态和本阶段提交。

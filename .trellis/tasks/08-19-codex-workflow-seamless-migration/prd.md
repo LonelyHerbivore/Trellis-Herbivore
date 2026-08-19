@@ -21,6 +21,8 @@
 - review gate 为任务级显式选择；已启用 gate 按 spec -> code -> architecture 执行，merge-review 在最终合并后、全量验证前执行。Codex inline 不得静默跳过已选 gate。
 - Codex hooks 依赖用户级能力和宿主审批；缺失时必须有 `AGENTS.md` 与 `trellis-start` 降级路径。对用户级 `cc-switch` 数据库或 `~/.codex/config.toml` 的实际修改须在阶段 4 获得单独授权。
 - 本迁移父任务复用当前 checkout `D:\Trellis\Trellis-0.6.0-beta.17`，分支为 `task/codex-workflow-seamless-migration`，目标分支为 `main`。
+- 2026-08-19 用户确认：按阶段 1 至阶段 9 的依赖顺序推进；每个阶段独立测试、三重 review 和 Git 提交。
+- 2026-08-19 用户确认：阶段 4 的用户级 cc-switch/Codex 配置采用“每次显式确认后自动写入”。命令必须先展示目标文件、拟写入项和备份方式；拒绝或无权限时只报告可执行的手动降级步骤。
 
 ## 验收标准
 
