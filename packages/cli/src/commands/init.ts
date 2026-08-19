@@ -20,7 +20,10 @@ import {
 import { AI_TOOLS, type CliFlag } from "../types/ai-tools.js";
 import { DIR_NAMES, FILE_NAMES, PATHS } from "../constants/paths.js";
 import { VERSION } from "../constants/version.js";
-import { agentsMdContent } from "../templates/markdown/index.js";
+import {
+  agentsMdContent,
+  claudeMdContent,
+} from "../templates/markdown/index.js";
 import {
   setWriteMode,
   startRecordingWrites,
@@ -871,6 +874,10 @@ async function handleReinit(
             await configurePlatform(platformId, cwd);
           }
         }
+      }
+
+      if (platformsToAdd.includes("claude")) {
+        await writeRootFile(cwd, FILE_NAMES.CLAUDE, claudeMdContent);
       }
     } finally {
       stopRecordingWrites();
@@ -1863,7 +1870,7 @@ export async function init(options: InitOptions): Promise<void> {
     }
 
     // Create root files (skip if exists)
-    await createRootFiles(cwd);
+    await createRootFiles(cwd, tools.includes("claude"));
   } finally {
     stopRecordingWrites();
   }
@@ -1968,12 +1975,23 @@ function askInput(prompt: string): Promise<string> {
   });
 }
 
-async function createRootFiles(cwd: string): Promise<void> {
-  const agentsPath = path.join(cwd, FILE_NAMES.AGENTS);
+async function writeRootFile(
+  cwd: string,
+  filename: string,
+  content: string,
+): Promise<void> {
+  const written = await writeFile(path.join(cwd, filename), content);
+  if (written) {
+    console.log(chalk.blue(`📄 Created ${filename}`));
+  }
+}
 
-  // Write AGENTS.md from template
-  const agentsWritten = await writeFile(agentsPath, agentsMdContent);
-  if (agentsWritten) {
-    console.log(chalk.blue("📄 Created AGENTS.md"));
+async function createRootFiles(
+  cwd: string,
+  includeClaude: boolean,
+): Promise<void> {
+  await writeRootFile(cwd, FILE_NAMES.AGENTS, agentsMdContent);
+  if (includeClaude) {
+    await writeRootFile(cwd, FILE_NAMES.CLAUDE, claudeMdContent);
   }
 }

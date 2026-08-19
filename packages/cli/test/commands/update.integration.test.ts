@@ -369,36 +369,38 @@ describe("update() integration", () => {
     expect(fs.readFileSync(targetFull, "utf-8")).toBe(templateContent);
   });
 
-  it("#4c auto-updates legacy untracked AGENTS.md and preserves outside content", async () => {
-    await setupProject();
+  it.each([FILE_NAMES.AGENTS, FILE_NAMES.CLAUDE])(
+    "#4c auto-updates legacy untracked %s and preserves outside content",
+    async (targetRelative) => {
+      await setupProject();
 
-    const targetRelative = FILE_NAMES.AGENTS;
-    const targetFull = path.join(tmpDir, targetRelative);
-    const templateContent = fs.readFileSync(targetFull, "utf-8");
-    const oldContent = removeSubagentsSection(templateContent);
-    const existingContent = `# Local instructions\n\n${oldContent}\n\n## Project Notes\n\nKeep this.`;
-    const expectedContent = `# Local instructions\n\n${templateContent}\n\n## Project Notes\n\nKeep this.`;
+      const targetFull = path.join(tmpDir, targetRelative);
+      const templateContent = fs.readFileSync(targetFull, "utf-8");
+      const oldContent = removeSubagentsSection(templateContent);
+      const existingContent = `# Local instructions\n\n${oldContent}\n\n## Project Notes\n\nKeep this.`;
+      const expectedContent = `# Local instructions\n\n${templateContent}\n\n## Project Notes\n\nKeep this.`;
 
-    fs.writeFileSync(targetFull, existingContent);
+      fs.writeFileSync(targetFull, existingContent);
 
-    const hashFile = path.join(
-      tmpDir,
-      DIR_NAMES.WORKFLOW,
-      ".template-hashes.json",
-    );
-    const hashes = removeHashEntry(
-      readHashesV2(hashFile),
-      targetRelative,
-    ) as Record<string, string>;
-    writeHashesV2(hashFile, hashes);
+      const hashFile = path.join(
+        tmpDir,
+        DIR_NAMES.WORKFLOW,
+        ".template-hashes.json",
+      );
+      const hashes = removeHashEntry(
+        readHashesV2(hashFile),
+        targetRelative,
+      ) as Record<string, string>;
+      writeHashesV2(hashFile, hashes);
 
-    await update({});
+      await update({});
 
-    expect(fs.readFileSync(targetFull, "utf-8")).toBe(expectedContent);
-    expect(readHashesV2(hashFile)[targetRelative]).toBe(
-      computeHash(expectedContent),
-    );
-  });
+      expect(fs.readFileSync(targetFull, "utf-8")).toBe(expectedContent);
+      expect(readHashesV2(hashFile)[targetRelative]).toBe(
+        computeHash(expectedContent),
+      );
+    },
+  );
 
   it("#4c preserves user-modified untracked AGENTS.md managed block", async () => {
     await setupProject();
@@ -454,6 +456,78 @@ describe("update() integration", () => {
     );
     // Tail equals the canonical template (force-applied managed block).
     expect(result.endsWith(templateContent.trimEnd() + "\n")).toBe(true);
+  });
+
+  it("#4e updates the Claude managed block while preserving outside content", async () => {
+    await setupProject();
+
+    const targetRelative = FILE_NAMES.CLAUDE;
+    const templateContent = readProjectFile(targetRelative);
+    const oldContent = templateContent.replace(
+      "These instructions are for AI assistants working in this project.\n",
+      "These are older project instructions.\n",
+    );
+    const existingContent = `# Local instructions\n\n${oldContent}\n\n## Project Notes\n\nKeep this.`;
+    const expectedContent = `# Local instructions\n\n${templateContent}\n\n## Project Notes\n\nKeep this.`;
+    writeProjectFile(targetRelative, existingContent);
+
+    const hashes = readHashesV2(hashFilePath());
+    hashes[targetRelative] = computeHash(existingContent);
+    writeHashesV2(hashFilePath(), hashes);
+
+    await update({});
+
+    expect(readProjectFile(targetRelative)).toBe(expectedContent);
+  });
+
+  it("#4f preserves a user-modified Claude managed block", async () => {
+    await setupProject();
+
+    const targetRelative = FILE_NAMES.CLAUDE;
+    const targetFull = projectFile(targetRelative);
+    const templateContent = readProjectFile(targetRelative);
+    const modifiedContent = templateContent.replace(
+      "# Trellis Instructions",
+      "# Custom Claude Instructions",
+    );
+    fs.writeFileSync(targetFull, modifiedContent);
+
+    await update({ skipAll: true });
+
+    expect(readProjectFile(targetRelative)).toBe(modifiedContent);
+  });
+
+  it("#4g appends the Claude managed block to a user file without markers", async () => {
+    await setupProject();
+
+    const targetRelative = FILE_NAMES.CLAUDE;
+    const targetFull = projectFile(targetRelative);
+    const templateContent = readProjectFile(targetRelative);
+    const userContent = "# Project notes\n\nKeep this file.\n";
+    fs.writeFileSync(targetFull, userContent);
+
+    await update({ force: true });
+
+    const result = readProjectFile(targetRelative);
+    expect(result).toContain("# Project notes");
+    expect(result).toContain("Keep this file.");
+    expect(result).toContain("<!-- TRELLIS:START -->");
+    expect(result).toContain("<!-- TRELLIS:END -->");
+    expect(result.indexOf("# Project notes")).toBeLessThan(
+      result.indexOf("<!-- TRELLIS:START -->"),
+    );
+    expect(result.endsWith(templateContent.trimEnd() + "\n")).toBe(true);
+  });
+
+  it("#4h does not add CLAUDE.md when updating a Codex-only project", async () => {
+    await init({ yes: true, force: true, codex: true });
+
+    expect(fs.existsSync(projectFile(FILE_NAMES.CLAUDE))).toBe(false);
+    fs.writeFileSync(versionFilePath(), "0.0.1");
+
+    await update({ force: true });
+
+    expect(fs.existsSync(projectFile(FILE_NAMES.CLAUDE))).toBe(false);
   });
 
   it("#5 force overwrites user-modified files", async () => {

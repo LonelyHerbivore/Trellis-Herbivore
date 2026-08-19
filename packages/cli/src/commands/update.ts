@@ -42,7 +42,10 @@ import {
   gitignoreTemplate,
   workflowMdTemplate,
 } from "../templates/trellis/index.js";
-import { agentsMdContent } from "../templates/markdown/index.js";
+import {
+  agentsMdContent,
+  claudeMdContent,
+} from "../templates/markdown/index.js";
 
 import {
   ALL_MANAGED_DIRS,
@@ -84,11 +87,11 @@ type ConflictAction = "overwrite" | "skip" | "create-new";
 const CLAUDE_SETTINGS_PATH = ".claude/settings.json";
 const TRELLIS_BLOCK_START = "<!-- TRELLIS:START -->";
 const TRELLIS_BLOCK_END = "<!-- TRELLIS:END -->";
-const LEGACY_UNTRACKED_AGENTS_MD_BLOCK_HASHES = new Set<string>([
-  // v0.5.0-beta.17 and earlier wrote AGENTS.md but did not hash-track it.
-  // This hash is the pristine Trellis-managed block before the Subagents
-  // section was added, so old untouched projects can be updated without a
-  // false "modified by you" conflict.
+const LEGACY_UNTRACKED_ROOT_INSTRUCTION_BLOCK_HASHES = new Set<string>([
+  // v0.5.0-beta.17 and earlier did not hash-track this managed root block.
+  // It now renders both root instruction files. The hash is from before the
+  // Subagents section was added, so old untouched projects can update without
+  // a false "modified by you" conflict.
   "c1f511b1cfc1902f2147da159f09cc51f380b0c9e341cdb3ac5dea5233f3e307",
 ]);
 
@@ -142,28 +145,32 @@ function replaceTrellisManagedBlock(
   );
 }
 
-function buildAgentsMdTemplate(cwd: string): string {
-  const fullPath = path.join(cwd, FILE_NAMES.AGENTS);
+function buildRootInstructionTemplate(
+  cwd: string,
+  filename: string,
+  templateContent: string,
+): string {
+  const fullPath = path.join(cwd, filename);
   if (!fs.existsSync(fullPath)) {
-    return agentsMdContent;
+    return templateContent;
   }
 
   const existingContent = fs.readFileSync(fullPath, "utf-8");
 
   // Existing file already has TRELLIS:START/END markers — replace just the
   // managed block, preserving everything outside it.
-  const replaced = replaceTrellisManagedBlock(existingContent, agentsMdContent);
+  const replaced = replaceTrellisManagedBlock(existingContent, templateContent);
   if (replaced !== null) {
     return replaced;
   }
 
   // Existing file has no managed-block markers (pre-0.5.0-beta.18 project, or
-  // user hand-wrote AGENTS.md without ever running through Trellis). Append
-  // the template's managed block at the end so user content is preserved
-  // instead of clobbered.
-  const templateBlock = getTrellisManagedBlock(agentsMdContent);
+  // user hand-wrote a root instruction file without ever running through
+  // Trellis). Append the template's managed block at the end so user content
+  // is preserved instead of clobbered.
+  const templateBlock = getTrellisManagedBlock(templateContent);
   if (!templateBlock) {
-    return agentsMdContent;
+    return templateContent;
   }
   const trimmed = existingContent.replace(/\s+$/, "");
   return `${trimmed}\n\n${templateBlock}\n`;
@@ -173,7 +180,10 @@ function isKnownUntrackedTemplate(
   relativePath: string,
   existingContent: string,
 ): boolean {
-  if (relativePath !== FILE_NAMES.AGENTS) {
+  if (
+    relativePath !== FILE_NAMES.AGENTS &&
+    relativePath !== FILE_NAMES.CLAUDE
+  ) {
     return false;
   }
 
@@ -182,7 +192,9 @@ function isKnownUntrackedTemplate(
     return false;
   }
 
-  return LEGACY_UNTRACKED_AGENTS_MD_BLOCK_HASHES.has(computeHash(managedBlock));
+  return LEGACY_UNTRACKED_ROOT_INSTRUCTION_BLOCK_HASHES.has(
+    computeHash(managedBlock),
+  );
 }
 
 /**
@@ -646,7 +658,16 @@ function collectTemplateFiles(
   files.set(`${DIR_NAMES.WORKFLOW}/workflow.md`, workflowMdTemplate);
   // workspace/index.md stays excluded — it's runtime-appended by add_session.py
   // (journal index) and has no script-parsed structure.
-  files.set(FILE_NAMES.AGENTS, buildAgentsMdTemplate(cwd));
+  files.set(
+    FILE_NAMES.AGENTS,
+    buildRootInstructionTemplate(cwd, FILE_NAMES.AGENTS, agentsMdContent),
+  );
+  if (platforms.has("claude-code")) {
+    files.set(
+      FILE_NAMES.CLAUDE,
+      buildRootInstructionTemplate(cwd, FILE_NAMES.CLAUDE, claudeMdContent),
+    );
+  }
 
   // Platform-specific templates (only for configured platforms)
   for (const platformId of platforms) {
@@ -761,14 +782,18 @@ function analyzeChanges(
   return result;
 }
 
-function collectMissingAgentsMdHash(
+function collectMissingRootInstructionHashes(
   changes: ChangeAnalysis,
   hashes: TemplateHashes,
 ): Map<string, string> {
   const files = new Map<string, string>();
 
   for (const file of changes.unchangedFiles) {
-    if (file.relativePath === FILE_NAMES.AGENTS && !hashes[file.relativePath]) {
+    if (
+      (file.relativePath === FILE_NAMES.AGENTS ||
+        file.relativePath === FILE_NAMES.CLAUDE) &&
+      !hashes[file.relativePath]
+    ) {
       files.set(file.relativePath, file.newContent);
     }
   }
@@ -936,7 +961,7 @@ function backupFile(
 const BACKUP_DIRS = ALL_MANAGED_DIRS;
 
 /** Root-level managed files to include in update backups. */
-const BACKUP_FILES = [FILE_NAMES.AGENTS] as const;
+const BACKUP_FILES = [FILE_NAMES.AGENTS, FILE_NAMES.CLAUDE] as const;
 
 /**
  * Patterns to exclude from backup (user data that shouldn't be backed up)
@@ -1995,7 +2020,10 @@ export async function update(options: UpdateOptions): Promise<void> {
 
   // Analyze changes (pass hashes for modification detection)
   const changes = analyzeChanges(cwd, hashes, templates);
-  const missingAgentsMdHash = collectMissingAgentsMdHash(changes, hashes);
+  const missingRootInstructionHashes = collectMissingRootInstructionHashes(
+    changes,
+    hashes,
+  );
 
   // Print summary
   printChangeSummary(changes);
@@ -2042,8 +2070,8 @@ export async function update(options: UpdateOptions): Promise<void> {
     !hasPendingMigrations &&
     !hasSafeDeletes
   ) {
-    if (!options.dryRun && missingAgentsMdHash.size > 0) {
-      updateHashes(cwd, missingAgentsMdHash);
+    if (!options.dryRun && missingRootInstructionHashes.size > 0) {
+      updateHashes(cwd, missingRootInstructionHashes);
     }
 
     if (isSameVersion) {
@@ -2316,7 +2344,7 @@ export async function update(options: UpdateOptions): Promise<void> {
   updateVersionFile(cwd);
 
   // Update template hashes for new, auto-updated, and overwritten files
-  const filesToHash = new Map<string, string>(missingAgentsMdHash);
+  const filesToHash = new Map<string, string>(missingRootInstructionHashes);
   for (const file of changes.newFiles) {
     filesToHash.set(file.relativePath, file.newContent);
   }

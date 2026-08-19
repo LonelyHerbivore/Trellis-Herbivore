@@ -90,6 +90,10 @@ describe("init() integration", () => {
 
     // Root files
     expect(fs.existsSync(path.join(tmpDir, "AGENTS.md"))).toBe(true);
+    expect(fs.existsSync(path.join(tmpDir, FILE_NAMES.CLAUDE))).toBe(true);
+    expect(
+      fs.readFileSync(path.join(tmpDir, FILE_NAMES.AGENTS), "utf-8"),
+    ).toBe(fs.readFileSync(path.join(tmpDir, FILE_NAMES.CLAUDE), "utf-8"));
 
     // Built-in multi-file skill is installed for default platforms.
     expect(
@@ -161,6 +165,25 @@ describe("init() integration", () => {
         ),
       ),
     ).toBe(true);
+    expect(fs.existsSync(path.join(tmpDir, FILE_NAMES.CLAUDE))).toBe(true);
+  });
+
+  it("#2b preserves a user-owned CLAUDE.md during initial skip-existing init", async () => {
+    const userContent = "# Local Claude instructions\n";
+    fs.writeFileSync(path.join(tmpDir, FILE_NAMES.CLAUDE), userContent);
+
+    await init({ yes: true, claude: true });
+
+    expect(
+      fs.readFileSync(path.join(tmpDir, FILE_NAMES.CLAUDE), "utf-8"),
+    ).toBe(userContent);
+    const hashes = JSON.parse(
+      fs.readFileSync(
+        path.join(tmpDir, DIR_NAMES.WORKFLOW, ".template-hashes.json"),
+        "utf-8",
+      ),
+    ) as { hashes?: Record<string, string> };
+    expect(hashes.hashes ?? {}).not.toHaveProperty(FILE_NAMES.CLAUDE);
   });
 
   it("#2a fresh Claude init writes the model matrix and tracks agent templates", async () => {
@@ -224,6 +247,18 @@ describe("init() integration", () => {
     );
     expect(fs.existsSync(path.join(tmpDir, ".github", "copilot"))).toBe(false);
     expect(fs.existsSync(path.join(tmpDir, ".pi"))).toBe(false);
+  });
+
+  it("#3a Claude and Codex share one root instruction template", async () => {
+    await init({ yes: true, claude: true, codex: true });
+
+    expect(fs.existsSync(path.join(tmpDir, ".claude"))).toBe(true);
+    expect(fs.existsSync(path.join(tmpDir, ".codex"))).toBe(true);
+    expect(fs.existsSync(path.join(tmpDir, FILE_NAMES.AGENTS))).toBe(true);
+    expect(fs.existsSync(path.join(tmpDir, FILE_NAMES.CLAUDE))).toBe(true);
+    expect(
+      fs.readFileSync(path.join(tmpDir, FILE_NAMES.AGENTS), "utf-8"),
+    ).toBe(fs.readFileSync(path.join(tmpDir, FILE_NAMES.CLAUDE), "utf-8"));
   });
 
   it("#3b codex platform creates skills plus .codex assets", async () => {
@@ -312,6 +347,7 @@ describe("init() integration", () => {
       fs.existsSync(path.join(tmpDir, ".codex", "hooks", "session-start.py")),
     ).toBe(true);
     expect(fs.existsSync(path.join(tmpDir, ".claude"))).toBe(false);
+    expect(fs.existsSync(path.join(tmpDir, FILE_NAMES.CLAUDE))).toBe(false);
     expect(fs.existsSync(path.join(tmpDir, ".cursor"))).toBe(false);
     expect(fs.existsSync(path.join(tmpDir, ".gemini"))).toBe(false);
 
@@ -330,6 +366,30 @@ describe("init() integration", () => {
     expect(trackedPaths).toContain(
       ".agents/skills/trellis-meta/references/local-architecture/overview.md",
     );
+  });
+
+  it("#3b1 Codex to Claude incremental init adds CLAUDE.md and preserves AGENTS.md", async () => {
+    await init({ yes: true, codex: true, user: "codex-user" });
+
+    const agentsPath = path.join(tmpDir, FILE_NAMES.AGENTS);
+    const agentsBefore = fs.readFileSync(agentsPath, "utf-8");
+    expect(fs.existsSync(path.join(tmpDir, FILE_NAMES.CLAUDE))).toBe(false);
+
+    await init({ yes: true, claude: true });
+
+    expect(fs.readFileSync(agentsPath, "utf-8")).toBe(agentsBefore);
+    expect(fs.existsSync(path.join(tmpDir, FILE_NAMES.CLAUDE))).toBe(true);
+    expect(
+      fs.readFileSync(path.join(tmpDir, FILE_NAMES.CLAUDE), "utf-8"),
+    ).toBe(agentsBefore);
+
+    const hashesFile = JSON.parse(
+      fs.readFileSync(
+        path.join(tmpDir, DIR_NAMES.WORKFLOW, ".template-hashes.json"),
+        "utf-8",
+      ),
+    ) as { hashes?: Record<string, string> };
+    expect(hashesFile.hashes).toHaveProperty(FILE_NAMES.CLAUDE);
   });
 
   it("#3c kiro platform creates .kiro/skills", async () => {
@@ -884,6 +944,11 @@ describe("init() integration", () => {
       "utf-8",
     );
     expect(hashes[FILE_NAMES.AGENTS]).toBe(computeHash(agentsContent));
+    const claudeContent = fs.readFileSync(
+      path.join(tmpDir, FILE_NAMES.CLAUDE),
+      "utf-8",
+    );
+    expect(hashes[FILE_NAMES.CLAUDE]).toBe(computeHash(claudeContent));
     expect(Object.keys(hashes).length).toBeGreaterThan(0);
   });
 

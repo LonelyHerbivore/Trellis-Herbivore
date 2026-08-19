@@ -3,7 +3,7 @@
   "name": "codex-workflow-migration-phase-2",
   "title": "Codex 工作流无缝迁移 - 阶段 2：共享入口模板",
   "description": "",
-  "status": "planning",
+  "status": "completed",
   "dev_type": null,
   "scope": null,
   "package": null,
@@ -11,7 +11,7 @@
   "creator": "codex",
   "assignee": "codex",
   "createdAt": "2026-08-19",
-  "completedAt": null,
+  "completedAt": "2026-08-19",
   "branch": "task/codex-workflow-seamless-migration",
   "base_branch": "main",
   "worktree_path": "D:\\Trellis\\Trellis-0.6.0-beta.17",
@@ -27,6 +27,11 @@
     "execution_mode": "subagent-orchestrated",
     "worktree_selection": "current_checkout",
     "development_flow": "default",
-    "review_gate_selection": { "spec-review": "enabled", "code-review": "enabled", "code-architecture-review": "enabled", "merge-review": "enabled" }
+    "review_gate_selection": {
+      "spec-review": "enabled",
+      "code-review": "enabled",
+      "code-architecture-review": "enabled",
+      "merge-review": "enabled"
+    }
   }
 }

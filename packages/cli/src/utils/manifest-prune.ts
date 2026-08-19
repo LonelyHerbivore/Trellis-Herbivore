@@ -18,9 +18,9 @@
  *     `.trellis/` wholesale via `fs.rmSync(..., { recursive: true })`, so
  *     manifest accuracy there doesn't affect uninstall data-loss. `update`
  *     also relies on these entries to detect user-modified workflow files.
- *   - Root-level `AGENTS.md` is kept only when it still looks Trellis-managed
- *     (contains the managed block markers) or is missing on disk. This
- *     self-heals old poisoned manifests for user-owned AGENTS.md files that
+ *   - Root-level instruction files are kept only when they still look
+ *     Trellis-managed (contain the managed block markers) or are missing on
+ *     disk. This self-heals old poisoned manifests for user-owned files that
  *     predated init and were skipped.
  *   - Paths referenced by `from`/`to` of any migration manifest entry
  *     (rename, rename-dir, delete, safe-file-delete) are preserved. Pruning
@@ -55,7 +55,7 @@ export interface PruneResult {
 /**
  * Compute the union of "what trellis writes" across:
  *   - every configured platform's collectTemplates() output
- *   - root-level AGENTS.md when it still carries Trellis managed-block markers
+ *   - root-level instruction files when they still carry Trellis managed-block markers
  *   - every migration manifest's from/to path (preserve so legitimate
  *     pending migrations can find their source/target)
  */
@@ -80,14 +80,14 @@ function buildKnownKeys(configuredPlatforms: readonly AITool[]): Set<string> {
 }
 
 /**
- * Root-level AGENTS.md needs special handling because it has no platform
- * registry owner. New fixed inits record it only when written, but old
- * manifests may contain a user-owned AGENTS.md that init skipped. The
+ * Root-level instruction files need special handling because they have no
+ * platform registry owner. New fixed inits record them only when written, but
+ * old manifests may contain user-owned files that init skipped. The
  * managed block markers are the least destructive ownership signal: no
  * markers means preserve the user's file by pruning the stale manifest key.
  */
-function shouldKeepAgentsMd(cwd: string): boolean {
-  const fullPath = path.join(cwd, FILE_NAMES.AGENTS);
+function shouldKeepRootInstructionFile(cwd: string, filename: string): boolean {
+  const fullPath = path.join(cwd, filename);
   if (!fs.existsSync(fullPath)) {
     return true;
   }
@@ -142,8 +142,8 @@ export function pruneOrphanManifestKeys(
       kept[key] = value;
       continue;
     }
-    if (key === FILE_NAMES.AGENTS) {
-      if (shouldKeepAgentsMd(cwd)) {
+    if (key === FILE_NAMES.AGENTS || key === FILE_NAMES.CLAUDE) {
+      if (shouldKeepRootInstructionFile(cwd, key)) {
         kept[key] = value;
       } else {
         pruned.push(key);

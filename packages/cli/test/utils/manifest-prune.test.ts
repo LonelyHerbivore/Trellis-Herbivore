@@ -15,6 +15,7 @@ import {
   homedirGuardMessage,
 } from "../../src/utils/cwd-guard.js";
 import { saveHashes, loadHashes } from "../../src/utils/template-hash.js";
+import { FILE_NAMES } from "../../src/constants/paths.js";
 
 describe("pruneOrphanManifestKeys", () => {
   let tmpDir: string;
@@ -82,12 +83,15 @@ describe("pruneOrphanManifestKeys", () => {
     expect(kept).not.toHaveProperty(".claude/sessions/user.jsonl");
   });
 
-  it("keeps root-level AGENTS.md when it has Trellis managed-block markers", () => {
-    const hashes = { "AGENTS.md": "h" };
-    fs.writeFileSync(
-      path.join(tmpDir, "AGENTS.md"),
-      "<!-- TRELLIS:START -->\nmanaged\n<!-- TRELLIS:END -->\n",
-    );
+  it("keeps root-level instruction files when they have Trellis markers", () => {
+    const rootFiles = [FILE_NAMES.AGENTS, FILE_NAMES.CLAUDE];
+    const hashes = Object.fromEntries(rootFiles.map((file) => [file, "h"]));
+    for (const file of rootFiles) {
+      fs.writeFileSync(
+        path.join(tmpDir, file),
+        "<!-- TRELLIS:START -->\nmanaged\n<!-- TRELLIS:END -->\n",
+      );
+    }
     saveHashes(tmpDir, hashes);
 
     const { pruned, hashes: kept } = pruneOrphanManifestKeys(
@@ -97,12 +101,17 @@ describe("pruneOrphanManifestKeys", () => {
     );
 
     expect(pruned).toEqual([]);
-    expect(kept).toHaveProperty("AGENTS.md");
+    expect(kept).toEqual(hashes);
   });
 
-  it("prunes poisoned root-level AGENTS.md when the file lacks Trellis markers", () => {
-    const hashes = { "AGENTS.md": "user-hash" };
-    fs.writeFileSync(path.join(tmpDir, "AGENTS.md"), "my own AGENTS.md\n");
+  it("prunes poisoned root-level instruction files without Trellis markers", () => {
+    const rootFiles = [FILE_NAMES.AGENTS, FILE_NAMES.CLAUDE];
+    const hashes = Object.fromEntries(
+      rootFiles.map((file) => [file, "user-hash"]),
+    );
+    for (const file of rootFiles) {
+      fs.writeFileSync(path.join(tmpDir, file), `my own ${file}\n`);
+    }
     saveHashes(tmpDir, hashes);
 
     const { pruned, hashes: kept } = pruneOrphanManifestKeys(
@@ -111,8 +120,10 @@ describe("pruneOrphanManifestKeys", () => {
       hashes,
     );
 
-    expect(pruned).toEqual(["AGENTS.md"]);
-    expect(kept).not.toHaveProperty("AGENTS.md");
+    expect(pruned.sort()).toEqual([...rootFiles].sort());
+    for (const file of rootFiles) {
+      expect(kept).not.toHaveProperty(file);
+    }
   });
 
   it("persists pruned manifest to disk by default", () => {

@@ -399,7 +399,7 @@ export function initializeHashes(
   // disk. This preserves the legacy behavior for tests / scripts that don't
   // go through the new recording flow.
   if (!trackedPaths) {
-    for (const relativePath of [FILE_NAMES.AGENTS]) {
+    for (const relativePath of [FILE_NAMES.AGENTS, FILE_NAMES.CLAUDE]) {
       if (shouldExcludeFromHash(relativePath)) continue;
       const fullPath = path.join(cwd, relativePath);
       if (!fs.existsSync(fullPath)) continue;
