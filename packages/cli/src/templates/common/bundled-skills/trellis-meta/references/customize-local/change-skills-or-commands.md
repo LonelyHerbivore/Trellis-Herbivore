@@ -56,7 +56,7 @@ If a command only repeats workflow rules, prefer making it reference/read `.trel
 | Claude Code | `.claude/skills/`, `.claude/commands/` |
 | Cursor | `.cursor/skills/`, `.cursor/commands/` |
 | OpenCode | `.opencode/skills/`, `.opencode/commands/` |
-| Codex | `.agents/skills/`, `.codex/skills/` |
+| Codex | `.agents/skills/` (Trellis skills); `.codex/agents/` (custom agents) |
 | GitHub Copilot | `.github/skills/`, `.github/prompts/` |
 | Kilo / Antigravity / Windsurf | workflows + skills |
 

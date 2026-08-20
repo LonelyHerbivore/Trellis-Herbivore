@@ -45,6 +45,8 @@ import {
 import {
   agentsMdContent,
   claudeMdContent,
+  getTrellisManagedBlock,
+  replaceTrellisManagedBlock,
 } from "../templates/markdown/index.js";
 
 import {
@@ -54,8 +56,12 @@ import {
   isManagedPath,
   isManagedRootDir,
 } from "../configurators/index.js";
-import { replacePythonCommandLiterals } from "../configurators/shared.js";
+import {
+  replacePythonCommandLiterals,
+  setResolvedPythonCommand,
+} from "../configurators/shared.js";
 import { pruneOrphanManifestKeys } from "../utils/manifest-prune.js";
+import { ensureCodexRequestUserInput } from "../utils/codex-user-config.js";
 
 export interface UpdateOptions {
   dryRun?: boolean;
@@ -85,8 +91,6 @@ interface ChangeAnalysis {
 type ConflictAction = "overwrite" | "skip" | "create-new";
 
 const CLAUDE_SETTINGS_PATH = ".claude/settings.json";
-const TRELLIS_BLOCK_START = "<!-- TRELLIS:START -->";
-const TRELLIS_BLOCK_END = "<!-- TRELLIS:END -->";
 const LEGACY_UNTRACKED_ROOT_INSTRUCTION_BLOCK_HASHES = new Set<string>([
   // v0.5.0-beta.17 and earlier did not hash-track this managed root block.
   // It now renders both root instruction files. The hash is from before the
@@ -104,46 +108,6 @@ const PROTECTED_PATHS = [
   `${DIR_NAMES.WORKFLOW}/.developer`,
   `${DIR_NAMES.WORKFLOW}/.current-task`,
 ];
-
-function getTrellisManagedBlock(content: string): string | null {
-  const start = content.indexOf(TRELLIS_BLOCK_START);
-  if (start === -1) {
-    return null;
-  }
-
-  const end = content.indexOf(TRELLIS_BLOCK_END, start);
-  if (end === -1) {
-    return null;
-  }
-
-  return content.slice(start, end + TRELLIS_BLOCK_END.length);
-}
-
-function replaceTrellisManagedBlock(
-  existingContent: string,
-  templateContent: string,
-): string | null {
-  const existingStart = existingContent.indexOf(TRELLIS_BLOCK_START);
-  if (existingStart === -1) {
-    return null;
-  }
-
-  const existingEnd = existingContent.indexOf(TRELLIS_BLOCK_END, existingStart);
-  if (existingEnd === -1) {
-    return null;
-  }
-
-  const templateBlock = getTrellisManagedBlock(templateContent);
-  if (!templateBlock) {
-    return null;
-  }
-
-  return (
-    existingContent.slice(0, existingStart) +
-    templateBlock +
-    existingContent.slice(existingEnd + TRELLIS_BLOCK_END.length)
-  );
-}
 
 function buildRootInstructionTemplate(
   cwd: string,
@@ -660,7 +624,11 @@ function collectTemplateFiles(
   // (journal index) and has no script-parsed structure.
   files.set(
     FILE_NAMES.AGENTS,
-    buildRootInstructionTemplate(cwd, FILE_NAMES.AGENTS, agentsMdContent),
+    buildRootInstructionTemplate(
+      cwd,
+      FILE_NAMES.AGENTS,
+      platforms.has("codex") ? agentsMdContent : claudeMdContent,
+    ),
   );
   if (platforms.has("claude-code")) {
     files.set(
@@ -1730,6 +1698,8 @@ function printMigrationResult(result: MigrationResult): void {
  */
 export async function update(options: UpdateOptions): Promise<void> {
   const cwd = process.cwd();
+  const pythonCommand = process.env.TRELLIS_PYTHON_CMD?.trim();
+  if (pythonCommand) setResolvedPythonCommand(pythonCommand);
 
   // Check if Trellis is initialized
   if (!fs.existsSync(path.join(cwd, DIR_NAMES.WORKFLOW))) {
@@ -1832,6 +1802,14 @@ export async function update(options: UpdateOptions): Promise<void> {
         "  Legacy Codex detected: .agents/skills/ tracked without .codex/ — will create .codex/ directory",
       ),
     );
+  }
+
+  if (codexUpgradeNeeded || getConfiguredPlatforms(cwd).has("codex")) {
+    await ensureCodexRequestUserInput({
+      interactive: process.stdin.isTTY === true,
+      dryRun: options.dryRun,
+      ...(pythonCommand ? { pythonCommand } : {}),
+    });
   }
 
   // Self-heal poisoned manifests: prune entries that no current platform

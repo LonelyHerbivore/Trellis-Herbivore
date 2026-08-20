@@ -112,9 +112,7 @@ describe("replacePythonCommandLiterals", () => {
 
   it("does not replace python3 that is part of a longer word", () => {
     mockPlatform("win32");
-    // "python3" as a standalone token is replaced; "python3x" contains "python3"
-    // so it WILL be replaced to "pythonx" — this is expected behavior
-    expect(replacePythonCommandLiterals("python3x")).toBe("pythonx");
+    expect(replacePythonCommandLiterals("python3x")).toBe("python3x");
   });
 
   it("handles multiline content with mixed shebangs and commands", () => {

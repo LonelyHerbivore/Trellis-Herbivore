@@ -34,6 +34,9 @@ import {
   resolveSkills,
   wrapWithCommandFrontmatter,
   replacePythonCommandLiterals,
+  resetResolvedPythonCommand,
+  resolveCodexHooksConfig,
+  setResolvedPythonCommand,
 } from "../../src/configurators/shared.js";
 
 const BUNDLED_SKILL_NAME = "trellis-meta";
@@ -86,10 +89,38 @@ describe("getConfiguredPlatforms", () => {
     expect(result.has("opencode")).toBe(true);
   });
 
-  it("detects .codex directory as codex", () => {
-    fs.mkdirSync(path.join(tmpDir, ".codex"), { recursive: true });
-    const result = getConfiguredPlatforms(tmpDir);
-    expect(result.has("codex")).toBe(true);
+  it("does not treat Codex runtime data as a Trellis Codex configuration", () => {
+    const sessionPath = path.join(
+      tmpDir,
+      ".codex",
+      "sessions",
+      "2026",
+      "session.jsonl",
+    );
+    fs.mkdirSync(path.dirname(sessionPath), { recursive: true });
+    fs.writeFileSync(sessionPath, "user runtime data\n");
+
+    expect(getConfiguredPlatforms(tmpDir).has("codex")).toBe(false);
+  });
+
+  it("detects Trellis Codex configuration markers", () => {
+    const configPath = path.join(tmpDir, ".codex", "config.toml");
+    fs.mkdirSync(path.dirname(configPath), { recursive: true });
+    fs.writeFileSync(configPath, getCodexConfigTemplate().content);
+
+    expect(getConfiguredPlatforms(tmpDir).has("codex")).toBe(true);
+
+    fs.rmSync(configPath);
+    const agentPath = path.join(
+      tmpDir,
+      ".codex",
+      "agents",
+      "trellis-check.toml",
+    );
+    fs.mkdirSync(path.dirname(agentPath), { recursive: true });
+    fs.writeFileSync(agentPath, "description = \"Trellis\"\n");
+
+    expect(getConfiguredPlatforms(tmpDir).has("codex")).toBe(true);
   });
 
   it(".agents/skills alone does NOT detect as codex (shared standard)", () => {
@@ -158,9 +189,14 @@ describe("getConfiguredPlatforms", () => {
 
   it("detects multiple platforms simultaneously", () => {
     for (const id of PLATFORM_IDS) {
-      fs.mkdirSync(path.join(tmpDir, AI_TOOLS[id].configDir), {
-        recursive: true,
-      });
+      const configDir = path.join(tmpDir, AI_TOOLS[id].configDir);
+      fs.mkdirSync(configDir, { recursive: true });
+      if (id === "codex") {
+        fs.writeFileSync(
+          path.join(configDir, "config.toml"),
+          getCodexConfigTemplate().content,
+        );
+      }
     }
     const result = getConfiguredPlatforms(tmpDir);
     expect(result.size).toBe(PLATFORM_IDS.length);
@@ -193,6 +229,7 @@ describe("configurePlatform", () => {
   afterEach(() => {
     fs.rmSync(tmpDir, { recursive: true, force: true });
     setWriteMode("ask");
+    resetResolvedPythonCommand();
   });
 
   it("configurePlatform('claude-code') creates .claude directory", async () => {
@@ -214,6 +251,7 @@ describe("configurePlatform", () => {
     await configurePlatform("codex", tmpDir);
     expect(fs.existsSync(path.join(tmpDir, ".agents", "skills"))).toBe(true);
     expect(fs.existsSync(path.join(tmpDir, ".codex"))).toBe(true);
+    expect(fs.existsSync(path.join(tmpDir, ".codex", "skills"))).toBe(false);
   });
 
   it("configurePlatform writes collected templates byte-for-byte for every platform", async () => {
@@ -282,6 +320,38 @@ describe("configurePlatform", () => {
     expect(
       fs.existsSync(path.join(skillsRoot, "trellis-start", "SKILL.md")),
     ).toBe(true);
+    const startSkill = fs.readFileSync(
+      path.join(skillsRoot, "trellis-start", "SKILL.md"),
+      "utf-8",
+    );
+    expect(startSkill).not.toContain("Claude Code");
+    expect(startSkill).not.toContain("AskUserQuestion");
+    expect(startSkill).toContain(
+      "only invoke Codex skills and agents installed in this project",
+    );
+    expect(startSkill).not.toContain("trellis-spec-review");
+    expect(startSkill).not.toContain("trellis-code-review");
+    expect(startSkill).not.toContain("trellis-code-architecture-review");
+    expect(startSkill).not.toContain("trellis-merge-review");
+    expect(startSkill).not.toContain("trellis-worktrees");
+    expect(
+      fs.existsSync(path.join(skillsRoot, "trellis-break-loop", "SKILL.md")),
+    ).toBe(true);
+    expect(fs.existsSync(path.join(tmpDir, ".codex", "skills"))).toBe(false);
+  });
+
+  it("collectPlatformTemplates('codex') has no private skills layer", () => {
+    const templates = collectPlatformTemplates("codex");
+    expect(templates).toBeInstanceOf(Map);
+    expect(
+      [...(templates ?? new Map()).keys()].some((file) =>
+        file.startsWith(".codex/skills/"),
+      ),
+    ).toBe(false);
+    expect(templates?.has(".agents/skills/trellis-break-loop/SKILL.md")).toBe(
+      true,
+    );
+    expect(templates?.has(".agents/skills/trellis-start/SKILL.md")).toBe(true);
   });
 
   it("configurePlatform('codex') writes custom agents and config", async () => {
@@ -950,14 +1020,109 @@ describe("configurePlatform", () => {
     const templates = collectPlatformTemplates("codex");
     expect(templates).toBeInstanceOf(Map);
     expect(templates?.get(".codex/hooks.json")).toBe(
-      resolvePlaceholders(getCodexHooksConfig()),
+      resolveCodexHooksConfig(getCodexHooksConfig()),
     );
   });
 
-  it("codex hooks.json template keeps PYTHON_CMD placeholder", () => {
+  it("codex hooks.json template keeps the JSON-safe Python placeholder", () => {
     const rawTemplate = getCodexHooksConfig();
     expect(rawTemplate).toContain(
-      "{{PYTHON_CMD}} -X utf8 .codex/hooks/inject-workflow-state.py",
+      "{{PYTHON_CMD_JSON}} -X utf8 .codex/hooks/inject-workflow-state.py",
+    );
+  });
+
+  it("renders a Windows absolute Python command safely for Codex skills, agents, and hooks", async () => {
+    setResolvedPythonCommand("C:\\Program Files\\Python312\\python.exe");
+
+    await configurePlatform("codex", tmpDir);
+    const hooks = JSON.parse(
+      readConfiguredFile(tmpDir, ".codex/hooks.json"),
+    ) as {
+      hooks: {
+        UserPromptSubmit: {
+          hooks: { command: string }[];
+        }[];
+      };
+    };
+    expect(hooks.hooks.UserPromptSubmit[0].hooks[0].command).toBe(
+      '"C:/Program Files/Python312/python.exe" -X utf8 .codex/hooks/inject-workflow-state.py',
+    );
+
+    const agent = readConfiguredFile(
+      tmpDir,
+      ".codex/agents/trellis-check.toml",
+    );
+    expect(agent).toContain('\\"C:/Program Files/Python312/python.exe\\"');
+    expect(agent).not.toContain("C:\\Program Files");
+
+    const startSkill = readConfiguredFile(
+      tmpDir,
+      ".agents/skills/trellis-start/SKILL.md",
+    );
+    const bundledReference = readConfiguredFile(
+      tmpDir,
+      ".agents/skills/trellis-meta/references/local-architecture/task-system.md",
+    );
+    expect(startSkill).toContain('"C:/Program Files/Python312/python.exe"');
+    expect(startSkill).toContain(
+      '"C:/Program Files/Python312/python.exe" ./.trellis/scripts/assert_trellis_enabled.py',
+    );
+    expect(startSkill).not.toContain("C:\\Program Files\\Python312\\python.exe");
+    expect(bundledReference).toContain(
+      '"C:/Program Files/Python312/python.exe" ./.trellis/scripts/task.py',
+    );
+
+    const templates = collectPlatformTemplates("codex");
+    expect(templates?.get(".codex/hooks.json")).toBe(
+      readConfiguredFile(tmpDir, ".codex/hooks.json"),
+    );
+    expect(templates?.get(".codex/agents/trellis-check.toml")).toBe(agent);
+    expect(templates?.get(".agents/skills/trellis-start/SKILL.md")).toBe(
+      startSkill,
+    );
+    expect(
+      templates?.get(
+        ".agents/skills/trellis-meta/references/local-architecture/task-system.md",
+      ),
+    ).toBe(bundledReference);
+  });
+
+  it("does not recursively replace python3 inside a resolved Python path", async () => {
+    setResolvedPythonCommand("C:\\Tools\\python3.exe");
+
+    await configurePlatform("codex", tmpDir);
+    const hooks = JSON.parse(
+      readConfiguredFile(tmpDir, ".codex/hooks.json"),
+    ) as {
+      hooks: {
+        UserPromptSubmit: {
+          hooks: { command: string }[];
+        }[];
+      };
+    };
+    expect(hooks.hooks.UserPromptSubmit[0].hooks[0].command).toBe(
+      "C:/Tools/python3.exe -X utf8 .codex/hooks/inject-workflow-state.py",
+    );
+
+    const agent = readConfiguredFile(
+      tmpDir,
+      ".codex/agents/trellis-check.toml",
+    );
+    const startSkill = readConfiguredFile(
+      tmpDir,
+      ".agents/skills/trellis-start/SKILL.md",
+    );
+    expect(agent).toContain("C:/Tools/python3.exe");
+    expect(startSkill).toContain(
+      "C:/Tools/python3.exe ./.trellis/scripts/get_context.py",
+    );
+    expect(agent).not.toContain("C:/Tools/C:/Tools/python3.exe.exe");
+    expect(startSkill).not.toContain("C:/Tools/C:/Tools/python3.exe.exe");
+
+    const templates = collectPlatformTemplates("codex");
+    expect(templates?.get(".codex/agents/trellis-check.toml")).toBe(agent);
+    expect(templates?.get(".agents/skills/trellis-start/SKILL.md")).toBe(
+      startSkill,
     );
   });
 

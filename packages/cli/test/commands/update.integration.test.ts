@@ -28,6 +28,10 @@ vi.mock("node:child_process", () => ({
   }),
 }));
 
+vi.mock("../../src/utils/codex-user-config.js", () => ({
+  ensureCodexRequestUserInput: vi.fn(),
+}));
+
 // === Imports ===
 
 import { init } from "../../src/commands/init.js";
@@ -37,6 +41,7 @@ import { DIR_NAMES, FILE_NAMES, PATHS } from "../../src/constants/paths.js";
 import { computeHash } from "../../src/utils/template-hash.js";
 import { workflowMdTemplate } from "../../src/templates/trellis/index.js";
 import { replacePythonCommandLiterals } from "../../src/configurators/shared.js";
+import { ensureCodexRequestUserInput } from "../../src/utils/codex-user-config.js";
 
 // A managed template file that update always handles (Python script)
 const MANAGED_FILE = `${PATHS.SCRIPTS}/get_context.py`;
@@ -147,6 +152,13 @@ describe("update() integration", () => {
     const noop = () => {};
     vi.spyOn(console, "log").mockImplementation(noop);
     vi.spyOn(console, "error").mockImplementation(noop);
+    vi.mocked(ensureCodexRequestUserInput).mockReset();
+    vi.mocked(ensureCodexRequestUserInput).mockResolvedValue({
+      status: "already-enabled",
+      source: "codex-config",
+      target: "test-user-config",
+      hooksStatus: "enabled",
+    });
     // Mock fetch for npm registry
     vi.stubGlobal(
       "fetch",
@@ -220,6 +232,101 @@ describe("update() integration", () => {
     // No backup directory created
     const entries = fs.readdirSync(path.join(tmpDir, DIR_NAMES.WORKFLOW));
     expect(entries.filter((e) => e.startsWith(".backup-")).length).toBe(0);
+  });
+
+
+  it("#1a Codex same-version update still checks the user config", async () => {
+    await init({ yes: true, force: true, codex: true });
+    vi.mocked(ensureCodexRequestUserInput).mockClear();
+
+    await update({});
+
+    expect(ensureCodexRequestUserInput).toHaveBeenCalledOnce();
+    expect(ensureCodexRequestUserInput).toHaveBeenCalledWith({
+      interactive: process.stdin.isTTY === true,
+      dryRun: undefined,
+    });
+  });
+
+  it("#1b Codex dry run delegates the no-write user config check", async () => {
+    await init({ yes: true, force: true, codex: true });
+    vi.mocked(ensureCodexRequestUserInput).mockClear();
+
+    await update({ dryRun: true });
+
+    expect(ensureCodexRequestUserInput).toHaveBeenCalledOnce();
+    expect(ensureCodexRequestUserInput).toHaveBeenCalledWith({
+      interactive: process.stdin.isTTY === true,
+      dryRun: true,
+    });
+  });
+
+  it("#1d treats an undefined TTY marker as non-interactive", async () => {
+    await init({ yes: true, force: true, codex: true });
+    vi.mocked(ensureCodexRequestUserInput).mockClear();
+    const ttyDescriptor = Object.getOwnPropertyDescriptor(
+      process.stdin,
+      "isTTY",
+    );
+    Object.defineProperty(process.stdin, "isTTY", {
+      configurable: true,
+      value: undefined,
+    });
+
+    try {
+      await update({ force: true });
+
+      expect(ensureCodexRequestUserInput).toHaveBeenCalledOnce();
+      expect(ensureCodexRequestUserInput).toHaveBeenCalledWith({
+        interactive: false,
+        dryRun: undefined,
+      });
+    } finally {
+      if (ttyDescriptor) {
+        Object.defineProperty(process.stdin, "isTTY", ttyDescriptor);
+      } else {
+        Reflect.deleteProperty(process.stdin, "isTTY");
+      }
+    }
+  });
+
+  it("#1e keeps the project update when the user config check fails", async () => {
+    await init({ yes: true, force: true, codex: true });
+    fs.writeFileSync(versionFilePath(), "0.0.1");
+    vi.mocked(ensureCodexRequestUserInput).mockClear();
+    vi.mocked(ensureCodexRequestUserInput).mockResolvedValueOnce({
+      status: "failed",
+      source: "codex-config",
+      target: "test-user-config",
+      hooksStatus: "unknown",
+      message: "stdin unavailable",
+    });
+
+    await update({ force: true });
+
+    expect(ensureCodexRequestUserInput).toHaveBeenCalledOnce();
+    expect(fs.readFileSync(versionFilePath(), "utf-8")).toBe(VERSION);
+  });
+
+  it("#1c Claude-only update does not check Codex user config", async () => {
+    await init({ yes: true, force: true, claude: true });
+    const userSession = projectFile(".codex/sessions/2026/user.jsonl");
+    fs.mkdirSync(path.dirname(userSession), { recursive: true });
+    fs.writeFileSync(userSession, "user-owned Codex runtime data\n");
+    vi.mocked(ensureCodexRequestUserInput).mockClear();
+
+    await update({ force: true });
+
+    expect(ensureCodexRequestUserInput).not.toHaveBeenCalled();
+    expect(readProjectFile(FILE_NAMES.AGENTS)).not.toContain(
+      "Codex fallback: if Trellis context was not injected",
+    );
+    expect(readProjectFile(FILE_NAMES.CLAUDE)).not.toContain(
+      "Codex fallback: if Trellis context was not injected",
+    );
+    expect(fs.readFileSync(userSession, "utf-8")).toBe(
+      "user-owned Codex runtime data\n",
+    );
   });
 
   it("#1b update silently creates trellis-switch.json for existing developers", async () => {
@@ -521,6 +628,7 @@ describe("update() integration", () => {
 
   it("#4h does not add CLAUDE.md when updating a Codex-only project", async () => {
     await init({ yes: true, force: true, codex: true });
+    vi.mocked(ensureCodexRequestUserInput).mockClear();
 
     expect(fs.existsSync(projectFile(FILE_NAMES.CLAUDE))).toBe(false);
     fs.writeFileSync(versionFilePath(), "0.0.1");
@@ -528,6 +636,14 @@ describe("update() integration", () => {
     await update({ force: true });
 
     expect(fs.existsSync(projectFile(FILE_NAMES.CLAUDE))).toBe(false);
+    expect(readProjectFile(FILE_NAMES.AGENTS)).toContain(
+      "Codex fallback: if Trellis context was not injected",
+    );
+    expect(ensureCodexRequestUserInput).toHaveBeenCalledOnce();
+    expect(ensureCodexRequestUserInput).toHaveBeenCalledWith({
+      interactive: process.stdin.isTTY === true,
+      dryRun: undefined,
+    });
   });
 
   it("#4i updates Claude and Codex templates without touching runtime data", async () => {
@@ -570,12 +686,14 @@ describe("update() integration", () => {
       ),
     );
     writeHashesV2(hashFilePath(), legacyHashes);
+    vi.mocked(ensureCodexRequestUserInput).mockClear();
 
     await update({ force: true });
 
     expect(
       fs.existsSync(projectFile(".codex/agents/trellis-check.toml")),
     ).toBe(true);
+    expect(ensureCodexRequestUserInput).toHaveBeenCalledOnce();
   });
 
   it("#4k shared Gemini skills do not trigger a Codex legacy upgrade", async () => {

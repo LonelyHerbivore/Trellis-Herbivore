@@ -23,8 +23,10 @@ import { VERSION } from "../constants/version.js";
 import {
   agentsMdContent,
   claudeMdContent,
+  replaceTrellisManagedBlock,
 } from "../templates/markdown/index.js";
 import {
+  getWriteMode,
   setWriteMode,
   startRecordingWrites,
   stopRecordingWrites,
@@ -63,6 +65,7 @@ import {
   type RegistryBackend,
 } from "../utils/template-fetcher.js";
 import { setupProxy, maskProxyUrl } from "../utils/proxy.js";
+import { ensureCodexRequestUserInput } from "../utils/codex-user-config.js";
 
 const MIN_PYTHON_MAJOR = 3;
 const MIN_PYTHON_MINOR = 9;
@@ -791,6 +794,12 @@ async function handleReinit(
   // No explicit flags → show menu
   if (!doAddPlatforms && !doAddDeveloper) {
     if (options.yes) {
+      if (configuredPlatforms.has("codex")) {
+        await ensureCodexRequestUserInput({
+          interactive: false,
+          pythonCommand: pythonCmd,
+        });
+      }
       console.log(chalk.gray(`Already initialized with: ${configuredNames}`));
       console.log(
         chalk.gray(
@@ -879,6 +888,9 @@ async function handleReinit(
       if (platformsToAdd.includes("claude")) {
         await writeRootFile(cwd, FILE_NAMES.CLAUDE, claudeMdContent);
       }
+      if (platformsToAdd.includes("codex")) {
+        await addCodexFallbackToAgents(cwd);
+      }
     } finally {
       stopRecordingWrites();
     }
@@ -905,6 +917,13 @@ async function handleReinit(
         }
       }
     }
+  }
+
+  if (configuredPlatforms.has("codex") || platformsToAdd.includes("codex")) {
+    await ensureCodexRequestUserInput({
+      interactive: !options.yes && process.stdin.isTTY === true,
+      pythonCommand: pythonCmd,
+    });
   }
 
   // --- Add developer ---
@@ -1870,7 +1889,11 @@ export async function init(options: InitOptions): Promise<void> {
     }
 
     // Create root files (skip if exists)
-    await createRootFiles(cwd, tools.includes("claude"));
+    await createRootFiles(
+      cwd,
+      tools.includes("claude"),
+      tools.includes("codex"),
+    );
   } finally {
     stopRecordingWrites();
   }
@@ -1887,6 +1910,13 @@ export async function init(options: InitOptions): Promise<void> {
     console.log(
       chalk.gray(`📋 Tracking ${hashedCount} template files for updates`),
     );
+  }
+
+  if (getConfiguredPlatforms(cwd).has("codex")) {
+    await ensureCodexRequestUserInput({
+      interactive: !options.yes && process.stdin.isTTY === true,
+      pythonCommand: pythonCmd,
+    });
   }
 
   // Non-native workflow is user-managed local content. Drop the
@@ -1992,11 +2022,58 @@ async function writeRootFile(
   }
 }
 
+async function addCodexFallbackToAgents(cwd: string): Promise<void> {
+  const agentsPath = path.join(cwd, FILE_NAMES.AGENTS);
+  if (!fs.existsSync(agentsPath)) {
+    await writeRootFile(cwd, FILE_NAMES.AGENTS, agentsMdContent);
+    return;
+  }
+
+  let existingContent: string;
+  try {
+    existingContent = fs.readFileSync(agentsPath, "utf-8");
+  } catch (error) {
+    console.warn(
+      chalk.yellow(
+        `⚠️ 无法读取 ${FILE_NAMES.AGENTS}；请在 hooks 未启用或未批准时手动调用 $trellis-start：${error instanceof Error ? error.message : String(error)}`,
+      ),
+    );
+    return;
+  }
+
+  const updatedContent = replaceTrellisManagedBlock(
+    existingContent,
+    agentsMdContent,
+  );
+  if (updatedContent === null) {
+    console.warn(
+      chalk.yellow(
+        `⚠️ 已保留不含 Trellis 托管块的 ${FILE_NAMES.AGENTS}；hooks 未启用或未批准时，请手动调用 $trellis-start。`,
+      ),
+    );
+    return;
+  }
+  if (updatedContent === existingContent) return;
+
+  const previousWriteMode = getWriteMode();
+  try {
+    setWriteMode("force");
+    await writeFile(agentsPath, updatedContent);
+  } finally {
+    setWriteMode(previousWriteMode);
+  }
+}
+
 async function createRootFiles(
   cwd: string,
   includeClaude: boolean,
+  includeCodex: boolean,
 ): Promise<void> {
-  await writeRootFile(cwd, FILE_NAMES.AGENTS, agentsMdContent);
+  await writeRootFile(
+    cwd,
+    FILE_NAMES.AGENTS,
+    includeCodex ? agentsMdContent : claudeMdContent,
+  );
   if (includeClaude) {
     await writeRootFile(cwd, FILE_NAMES.CLAUDE, claudeMdContent);
   }

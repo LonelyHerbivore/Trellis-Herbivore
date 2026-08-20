@@ -24,6 +24,10 @@ vi.mock("node:child_process", () => ({
   execSync: vi.fn().mockReturnValue(""),
 }));
 
+vi.mock("../../src/utils/codex-user-config.js", () => ({
+  ensureCodexRequestUserInput: vi.fn(),
+}));
+
 // === Imports ===
 
 import { init } from "../../src/commands/init.js";
@@ -32,6 +36,7 @@ import { DIR_NAMES, FILE_NAMES, PATHS } from "../../src/constants/paths.js";
 import { collectPlatformTemplates } from "../../src/configurators/index.js";
 import { computeHash } from "../../src/utils/template-hash.js";
 import { execSync } from "node:child_process";
+import { ensureCodexRequestUserInput } from "../../src/utils/codex-user-config.js";
 
 // eslint-disable-next-line @typescript-eslint/no-empty-function
 const noop = () => {};
@@ -65,6 +70,12 @@ describe("init() integration", () => {
       }
       return "";
     }) as typeof execSync);
+    vi.mocked(ensureCodexRequestUserInput).mockResolvedValue({
+      status: "already-enabled",
+      source: "codex-config",
+      target: "test-user-config",
+      hooksStatus: "enabled",
+    });
   });
 
   afterEach(() => {
@@ -99,6 +110,7 @@ describe("init() integration", () => {
     expect(fs.existsSync(path.join(tmpDir, ".github", "copilot"))).toBe(false);
     expect(fs.existsSync(path.join(tmpDir, ".factory"))).toBe(false);
     expect(fs.existsSync(path.join(tmpDir, ".pi"))).toBe(false);
+    expect(ensureCodexRequestUserInput).not.toHaveBeenCalled();
 
     // Root files
     expect(fs.existsSync(path.join(tmpDir, "AGENTS.md"))).toBe(true);
@@ -146,6 +158,7 @@ describe("init() integration", () => {
     await init({ yes: true, claude: true });
 
     expect(fs.existsSync(path.join(tmpDir, ".claude"))).toBe(true);
+    expect(ensureCodexRequestUserInput).not.toHaveBeenCalled();
     expect(fs.existsSync(path.join(tmpDir, ".cursor"))).toBe(false);
     expect(fs.existsSync(path.join(tmpDir, ".opencode"))).toBe(false);
     expect(fs.existsSync(path.join(tmpDir, ".codex"))).toBe(false);
@@ -261,16 +274,23 @@ describe("init() integration", () => {
     expect(fs.existsSync(path.join(tmpDir, ".pi"))).toBe(false);
   });
 
-  it("#3a Claude and Codex share one root instruction template", async () => {
+  it("#3a Codex fallback is scoped to AGENTS.md", async () => {
     await init({ yes: true, claude: true, codex: true });
 
     expect(fs.existsSync(path.join(tmpDir, ".claude"))).toBe(true);
     expect(fs.existsSync(path.join(tmpDir, ".codex"))).toBe(true);
     expect(fs.existsSync(path.join(tmpDir, FILE_NAMES.AGENTS))).toBe(true);
     expect(fs.existsSync(path.join(tmpDir, FILE_NAMES.CLAUDE))).toBe(true);
-    expect(
-      fs.readFileSync(path.join(tmpDir, FILE_NAMES.AGENTS), "utf-8"),
-    ).toBe(fs.readFileSync(path.join(tmpDir, FILE_NAMES.CLAUDE), "utf-8"));
+    const agentsContent = fs.readFileSync(
+      path.join(tmpDir, FILE_NAMES.AGENTS),
+      "utf-8",
+    );
+    const claudeContent = fs.readFileSync(
+      path.join(tmpDir, FILE_NAMES.CLAUDE),
+      "utf-8",
+    );
+    expect(agentsContent).toContain("Codex fallback: if Trellis context was not injected");
+    expect(claudeContent).not.toContain("Codex fallback: if Trellis context was not injected");
   });
 
   it("#3b codex platform creates skills plus .codex assets", async () => {
@@ -280,9 +300,34 @@ describe("init() integration", () => {
     // Codex SessionStart hook was removed (de-recursion fix); the
     // <trellis-bootstrap> notice in inject-workflow-state.py invokes
     // `$trellis-start` to load workflow context, so the skill is emitted.
+    const startSkillPath = path.join(
+      tmpDir,
+      ".agents",
+      "skills",
+      "trellis-start",
+      "SKILL.md",
+    );
+    expect(fs.existsSync(startSkillPath)).toBe(true);
+    const startSkill = fs.readFileSync(startSkillPath, "utf-8");
+    expect(startSkill).toContain(
+      "When Codex hooks are disabled or unapproved",
+    );
+    expect(startSkill).not.toContain("Claude Code");
+    expect(startSkill).not.toContain("AskUserQuestion");
+    expect(startSkill).toContain(
+      "only invoke Codex skills and agents installed in this project",
+    );
+    expect(startSkill).not.toContain("trellis-spec-review");
+    expect(startSkill).not.toContain("trellis-code-review");
+    expect(startSkill).not.toContain("trellis-code-architecture-review");
+    expect(startSkill).not.toContain("trellis-merge-review");
+    expect(startSkill).not.toContain("trellis-worktrees");
+    expect(
+      fs.readFileSync(path.join(tmpDir, FILE_NAMES.AGENTS), "utf-8"),
+    ).toContain("Codex fallback: if Trellis context was not injected");
     expect(
       fs.existsSync(
-        path.join(tmpDir, ".agents", "skills", "trellis-start", "SKILL.md"),
+        path.join(tmpDir, ".agents", "skills", "trellis-break-loop", "SKILL.md"),
       ),
     ).toBe(true);
     expect(
@@ -340,11 +385,7 @@ describe("init() integration", () => {
         ),
       ),
     ).toBe(true);
-    expect(
-      fs.existsSync(
-        path.join(tmpDir, ".codex", "skills", "trellis-meta", "SKILL.md"),
-      ),
-    ).toBe(false);
+    expect(fs.existsSync(path.join(tmpDir, ".codex", "skills"))).toBe(false);
     expect(fs.existsSync(path.join(tmpDir, ".codex", "config.toml"))).toBe(
       true,
     );
@@ -374,10 +415,81 @@ describe("init() integration", () => {
     };
     const hashes = hashesFile.hashes ?? {};
     const trackedPaths = Object.keys(hashes).map((p) => p.replace(/\\/g, "/"));
+    expect(trackedPaths).toContain(".agents/skills/trellis-start/SKILL.md");
+    expect(trackedPaths).toContain(".agents/skills/trellis-break-loop/SKILL.md");
+    expect(
+      trackedPaths.some((trackedPath) => trackedPath.startsWith(".codex/skills/")),
+    ).toBe(false);
     expect(trackedPaths).toContain(".agents/skills/trellis-meta/SKILL.md");
     expect(trackedPaths).toContain(
       ".agents/skills/trellis-meta/references/local-architecture/overview.md",
     );
+    const expectedPythonCmd =
+      process.platform === "win32" ? "python" : "python3";
+    expect(ensureCodexRequestUserInput).toHaveBeenCalledWith({
+      interactive: false,
+      pythonCommand: expectedPythonCmd,
+    });
+  });
+
+  it("#3b0 no-flag Codex re-init checks user configuration", async () => {
+    await init({ yes: true, codex: true, user: "codex-user" });
+    vi.mocked(ensureCodexRequestUserInput).mockClear();
+
+    await init({ yes: true });
+
+    const expectedPythonCmd =
+      process.platform === "win32" ? "python" : "python3";
+    expect(ensureCodexRequestUserInput).toHaveBeenCalledTimes(1);
+    expect(ensureCodexRequestUserInput).toHaveBeenCalledWith({
+      interactive: false,
+      pythonCommand: expectedPythonCmd,
+    });
+  });
+
+  it("#3b0a Codex recovery init checks user configuration", async () => {
+    await init({ yes: true, codex: true });
+    vi.mocked(ensureCodexRequestUserInput).mockClear();
+
+    await init({ yes: true });
+
+    const expectedPythonCmd =
+      process.platform === "win32" ? "python" : "python3";
+    expect(ensureCodexRequestUserInput).toHaveBeenCalledTimes(1);
+    expect(ensureCodexRequestUserInput).toHaveBeenCalledWith({
+      interactive: false,
+      pythonCommand: expectedPythonCmd,
+    });
+  });
+
+  it("#3b0b Codex init treats an undefined TTY marker as non-interactive", async () => {
+    vi.mocked(ensureCodexRequestUserInput).mockClear();
+    const ttyDescriptor = Object.getOwnPropertyDescriptor(
+      process.stdin,
+      "isTTY",
+    );
+    Object.defineProperty(process.stdin, "isTTY", {
+      configurable: true,
+      value: undefined,
+    });
+
+    try {
+      await init({ force: true, codex: true, user: "codex-user" });
+
+      const expectedPythonCmd =
+        process.platform === "win32" ? "python" : "python3";
+      expect(ensureCodexRequestUserInput).toHaveBeenCalledTimes(1);
+      expect(ensureCodexRequestUserInput).toHaveBeenCalledWith({
+        interactive: false,
+        pythonCommand: expectedPythonCmd,
+      });
+    } finally {
+      if (ttyDescriptor) {
+        Object.defineProperty(process.stdin, "isTTY", ttyDescriptor);
+      } else {
+        Reflect.deleteProperty(process.stdin, "isTTY");
+      }
+    }
   });
 
   it("#3b1 Codex to Claude incremental init adds CLAUDE.md and preserves AGENTS.md", async () => {
@@ -404,16 +516,23 @@ describe("init() integration", () => {
     expect(fs.existsSync(path.join(tmpDir, FILE_NAMES.CLAUDE))).toBe(true);
     expect(
       fs.readFileSync(path.join(tmpDir, FILE_NAMES.CLAUDE), "utf-8"),
-    ).toBe(agentsBefore);
+    ).not.toContain("Codex fallback: if Trellis context was not injected");
+    expect(agentsBefore).toContain(
+      "Codex fallback: if Trellis context was not injected",
+    );
 
     const hashesAfter = readTrackedHashes(tmpDir);
     expect(hashesAfter).toHaveProperty(FILE_NAMES.CLAUDE);
     expect(hashesAfter[codexAgentRelative]).toBe(codexAgentHashBefore);
   });
 
-  it("#3b2 Claude to Codex incremental init adds Codex assets and preserves Claude hashes", async () => {
+  it("#3b2 Claude to Codex incremental init adds Codex assets and updates the Trellis AGENTS block", async () => {
     await init({ yes: true, claude: true, user: "claude-user" });
 
+    const agentsBefore = fs.readFileSync(
+      path.join(tmpDir, FILE_NAMES.AGENTS),
+      "utf-8",
+    );
     const claudeAgentRelative = ".claude/agents/trellis-check.md";
     const claudeAgentPath = path.join(
       tmpDir,
@@ -433,12 +552,35 @@ describe("init() integration", () => {
     );
     expect(fs.existsSync(codexAgentPath)).toBe(true);
     expect(fs.readFileSync(claudeAgentPath, "utf-8")).toBe(claudeAgentBefore);
+    expect(fs.existsSync(path.join(tmpDir, ".codex", "skills"))).toBe(false);
+    const agentsAfter = fs.readFileSync(
+      path.join(tmpDir, FILE_NAMES.AGENTS),
+      "utf-8",
+    );
+    expect(agentsAfter).not.toBe(agentsBefore);
+    expect(agentsAfter).toContain(
+      "Codex fallback: if Trellis context was not injected",
+    );
 
     const hashesAfter = readTrackedHashes(tmpDir);
     expect(hashesAfter[claudeAgentRelative]).toBe(claudeAgentHashBefore);
     expect(hashesAfter[codexAgentRelative]).toBe(
       computeHash(fs.readFileSync(codexAgentPath, "utf-8")),
     );
+  });
+
+  it("#3b2a Claude to Codex incremental init preserves a user AGENTS.md without Trellis markers", async () => {
+    await init({ yes: true, claude: true, user: "claude-user" });
+
+    const agentsPath = path.join(tmpDir, FILE_NAMES.AGENTS);
+    const userContent = "# 用户自己的 Codex 指令\n";
+    fs.writeFileSync(agentsPath, userContent);
+    const warning = vi.spyOn(console, "warn").mockImplementation(noop);
+
+    await init({ yes: true, codex: true });
+
+    expect(fs.readFileSync(agentsPath, "utf-8")).toBe(userContent);
+    expect(warning).toHaveBeenCalledWith(expect.stringContaining("$trellis-start"));
   });
 
   it("#3b3 skip-existing recovers a missing Codex template without losing Claude hashes", async () => {
@@ -558,6 +700,12 @@ describe("init() integration", () => {
     expect(
       fs.existsSync(path.join(tmpDir, ".agent", "workflows", "start.md")),
     ).toBe(true);
+    expect(
+      fs.readFileSync(
+        path.join(tmpDir, ".agent", "workflows", "start.md"),
+        "utf-8",
+      ),
+    ).not.toContain("When Codex hooks are disabled or unapproved");
     expect(fs.existsSync(path.join(tmpDir, ".claude"))).toBe(false);
     expect(fs.existsSync(path.join(tmpDir, ".cursor"))).toBe(false);
     expect(fs.existsSync(path.join(tmpDir, ".gemini"))).toBe(false);

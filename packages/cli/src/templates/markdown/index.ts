@@ -28,7 +28,51 @@ const rootInstructionsContent: string = readLocalTemplate(
   "root-instructions.md",
 );
 
-export const agentsMdContent: string = rootInstructionsContent;
+const rootInstructionsEol = rootInstructionsContent.includes("\r\n")
+  ? "\r\n"
+  : "\n";
+const managedFooter =
+  "Managed by Trellis. Edits outside this block are preserved; edits inside may be overwritten by a future `trellis update`.";
+const TRELLIS_BLOCK_START = "<!-- TRELLIS:START -->";
+const TRELLIS_BLOCK_END = "<!-- TRELLIS:END -->";
+
+export function getTrellisManagedBlock(content: string): string | null {
+  const start = content.indexOf(TRELLIS_BLOCK_START);
+  if (start === -1) return null;
+
+  const end = content.indexOf(TRELLIS_BLOCK_END, start);
+  if (end === -1) return null;
+
+  return content.slice(start, end + TRELLIS_BLOCK_END.length);
+}
+
+export function replaceTrellisManagedBlock(
+  existingContent: string,
+  templateContent: string,
+): string | null {
+  const existingStart = existingContent.indexOf(TRELLIS_BLOCK_START);
+  if (existingStart === -1) return null;
+
+  const existingEnd = existingContent.indexOf(TRELLIS_BLOCK_END, existingStart);
+  if (existingEnd === -1) return null;
+
+  const templateBlock = getTrellisManagedBlock(templateContent);
+  if (!templateBlock) return null;
+
+  return (
+    existingContent.slice(0, existingStart) +
+    templateBlock +
+    existingContent.slice(existingEnd + TRELLIS_BLOCK_END.length)
+  );
+}
+
+export const agentsMdContent: string = rootInstructionsContent.replace(
+  managedFooter,
+  "Codex fallback: if Trellis context was not injected (for example hooks are disabled or unapproved), invoke `$trellis-start` once before Trellis-managed work." +
+    rootInstructionsEol +
+    rootInstructionsEol +
+    managedFooter,
+);
 export const claudeMdContent: string = rootInstructionsContent;
 
 // Workspace index template (developer work records)

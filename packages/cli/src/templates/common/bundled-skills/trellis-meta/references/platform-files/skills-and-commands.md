@@ -20,7 +20,7 @@ Trellis workflow skills usually share one semantic set: brainstorm, before-dev, 
 | Claude Code | `.claude/skills/`, `.claude/commands/` |
 | Cursor | `.cursor/skills/`, `.cursor/commands/` |
 | OpenCode | `.opencode/skills/`, `.opencode/commands/` |
-| Codex | `.agents/skills/`, `.codex/skills/` |
+| Codex | `.agents/skills/` (Trellis skills); `.codex/agents/` (custom agents) |
 | Kilo | `.kilocode/skills/`, `.kilocode/workflows/` |
 | Kiro | `.kiro/skills/` |
 | Gemini CLI | `.agents/skills/`, `.gemini/commands/` |

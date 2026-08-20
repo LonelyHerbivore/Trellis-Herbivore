@@ -18,6 +18,8 @@ project_doc_fallback_filenames = ["AGENTS.md"]
 # config.toml cannot set feature flags; they must be user-level.
 # Codex 0.129+ additionally gates each installed hook behind a one-time
 # `/hooks` TUI review; until the user approves it, the hook stays inactive.
+# If hooks are disabled or unapproved, invoke `$trellis-start` once before
+# Trellis-managed work; it loads the canonical compact startup context.
 
 # multi_agent_v2 forces structured subagent orchestration with the
 # `wait` tool — parent must block on terminal status before acting,

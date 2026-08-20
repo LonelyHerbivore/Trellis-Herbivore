@@ -1,6 +1,6 @@
 # Start Session
 
-Initialize a Trellis-managed development session. This platform has no session-start hook, so manually load the equivalent compact context by following these steps.
+Initialize a Trellis-managed development session. If startup context was not injected automatically, manually load the equivalent compact context by following these steps.
 
 ---
 

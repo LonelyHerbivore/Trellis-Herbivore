@@ -31,11 +31,16 @@ vi.mock("node:child_process", () => ({
   }),
 }));
 
+vi.mock("../../src/utils/codex-user-config.js", () => ({
+  ensureCodexRequestUserInput: vi.fn(),
+}));
+
 import { init } from "../../src/commands/init.js";
 import { uninstall } from "../../src/commands/uninstall.js";
 import { update } from "../../src/commands/update.js";
 import { loadHashes, saveHashes } from "../../src/utils/template-hash.js";
-import { agentsMdContent } from "../../src/templates/markdown/index.js";
+import { claudeMdContent } from "../../src/templates/markdown/index.js";
+import { ensureCodexRequestUserInput } from "../../src/utils/codex-user-config.js";
 
 // eslint-disable-next-line @typescript-eslint/no-empty-function
 const noop = () => {};
@@ -49,6 +54,13 @@ describe("init + uninstall: manifest accuracy + homedir guard", () => {
     vi.spyOn(console, "log").mockImplementation(noop);
     vi.spyOn(console, "error").mockImplementation(noop);
     vi.mocked(inquirer.prompt).mockResolvedValue({ proceed: true });
+    vi.mocked(ensureCodexRequestUserInput).mockReset();
+    vi.mocked(ensureCodexRequestUserInput).mockResolvedValue({
+      status: "already-enabled",
+      source: "codex-config",
+      target: "test-user-config",
+      hooksStatus: "enabled",
+    });
     Object.defineProperty(process.stdin, "isTTY", {
       configurable: true,
       value: true,
@@ -122,7 +134,7 @@ describe("init + uninstall: manifest accuracy + homedir guard", () => {
   it("#R1.3b init does not hash pre-existing AGENTS.md even when content is byte-identical", async () => {
     // A byte-identical file still might be user-owned. The init manifest must
     // track actual writes, not ownership inferred from content equality.
-    fs.writeFileSync(path.join(tmpDir, "AGENTS.md"), agentsMdContent);
+    fs.writeFileSync(path.join(tmpDir, "AGENTS.md"), claudeMdContent);
 
     await init({ yes: true, claude: true, force: true });
 

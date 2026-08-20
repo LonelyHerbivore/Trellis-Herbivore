@@ -2,14 +2,12 @@ import path from "node:path";
 import { AI_TOOLS } from "../types/ai-tools.js";
 import {
   getAllAgents,
-  getAllCodexSkills,
   getAllHooks,
   getConfigTemplate,
   getHooksConfig,
 } from "../templates/codex/index.js";
 import { ensureDir, writeFile } from "../utils/file-writer.js";
 import {
-  resolvePlaceholders,
   resolveAllAsSkillsNeutral,
   resolveBundledSkills,
   resolveCodexTrellisStartSkill,
@@ -17,12 +15,13 @@ import {
   writeSkills,
   writeSharedHooks,
   replacePythonCommandLiterals,
+  replacePythonCommandLiteralsForToml,
+  resolveCodexHooksConfig,
 } from "./shared.js";
 
 /**
  * Configure Codex by writing:
- * - .agents/skills/ — shared skills from common source
- * - .codex/skills/ — Codex-specific skills (platform-specific templates)
+ * - .agents/skills/ — Trellis skills from the common source
  * - .codex/agents/, hooks/, hooks.json, config.toml — platform-specific
  */
 export async function configureCodex(cwd: string): Promise<void> {
@@ -61,19 +60,6 @@ export async function configureCodex(cwd: string): Promise<void> {
 
   const codexRoot = path.join(cwd, ".codex");
 
-  // Codex-specific skills (platform-specific) → .codex/skills/
-  const codexSkillsRoot = path.join(codexRoot, "skills");
-  ensureDir(codexSkillsRoot);
-
-  for (const skill of getAllCodexSkills()) {
-    const skillDir = path.join(codexSkillsRoot, skill.name);
-    ensureDir(skillDir);
-    await writeFile(
-      path.join(skillDir, "SKILL.md"),
-      replacePythonCommandLiterals(skill.content),
-    );
-  }
-
   // Custom agents → .codex/agents/
   const codexAgentsRoot = path.join(codexRoot, "agents");
   ensureDir(codexAgentsRoot);
@@ -84,7 +70,7 @@ export async function configureCodex(cwd: string): Promise<void> {
   for (const agent of applyPullBasedPreludeToml(getAllAgents())) {
     await writeFile(
       path.join(codexAgentsRoot, `${agent.name}.toml`),
-      replacePythonCommandLiterals(agent.content),
+      replacePythonCommandLiteralsForToml(agent.content),
     );
   }
 
@@ -109,28 +95,12 @@ export async function configureCodex(cwd: string): Promise<void> {
   // Hooks config → .codex/hooks.json
   await writeFile(
     path.join(codexRoot, "hooks.json"),
-    resolvePlaceholders(getHooksConfig()),
+    resolveCodexHooksConfig(getHooksConfig()),
   );
 
-  // NOTE: Codex hooks require `features.hooks = true` in the user's
-  // ~/.codex/config.toml (Codex 0.129+). The legacy `features.codex_hooks = true`
-  // still works on 0.129+ but emits a deprecation warning; pre-0.129 only
-  // accepts `codex_hooks`. Without this flag the hooks.json is ignored and
-  // inject-workflow-state.py will never fire. Codex 0.129+ also gates each
-  // installed hook behind a one-time `/hooks` review — until the user approves
-  // it the workflow breadcrumb won't auto-inject (the trellis-bootstrap
-  // fallback in inject-workflow-state.py covers this case). Documented in
-  // spec/cli/backend/platform-integration.md.
-  if (!process.env.VITEST && !process.env.TRELLIS_QUIET) {
-    process.stderr.write(
-      "⚠️  Codex hooks require `features.hooks = true` in your " +
-        "~/.codex/config.toml (Codex 0.129+; older versions: `codex_hooks = true`). " +
-        "On Codex 0.129+ also run `/hooks` once to approve the Trellis " +
-        "UserPromptSubmit hook. Without these the Trellis workflow breadcrumb " +
-        "won't auto-inject. See Trellis docs for details.\n",
-    );
-  }
-
+  // User-level hook prerequisites are checked during Codex init/update. The
+  // generated AGENTS.md keeps the trellis-start fallback whenever hooks are
+  // disabled or have not yet been approved through /hooks.
   // Config → .codex/config.toml
   const config = getConfigTemplate();
   await writeFile(

@@ -36,6 +36,8 @@ import { configurePi, collectPiTemplates } from "./pi.js";
 // Shared utilities
 import {
   replacePythonCommandLiterals,
+  replacePythonCommandLiteralsForToml,
+  resolveCodexHooksConfig,
   resolvePlaceholders,
   resolveAllAsSkills,
   resolveAllAsSkillsNeutral,
@@ -59,7 +61,6 @@ import {
 } from "../templates/claude/index.js";
 import {
   getAllAgents as getCodexAgents,
-  getAllCodexSkills as getCodexPlatformSkills,
   getAllHooks as getCodexHooks,
   getConfigTemplate as getCodexConfigTemplate,
   getHooksConfig as getCodexHooksConfig,
@@ -232,11 +233,11 @@ const PLATFORM_FUNCTIONS: Record<AITool, PlatformFunctions> = {
           trellisStart.content,
         );
       }
-      for (const skill of getCodexPlatformSkills()) {
-        files.set(`.codex/skills/${skill.name}/SKILL.md`, skill.content);
-      }
       for (const agent of applyPullBasedPreludeToml(getCodexAgents())) {
-        files.set(`.codex/agents/${agent.name}.toml`, agent.content);
+        files.set(
+          `.codex/agents/${agent.name}.toml`,
+          replacePythonCommandLiteralsForToml(agent.content),
+        );
       }
       for (const hook of getCodexHooks()) {
         files.set(`.codex/hooks/${hook.name}`, hook.content);
@@ -247,7 +248,7 @@ const PLATFORM_FUNCTIONS: Record<AITool, PlatformFunctions> = {
       }
       files.set(
         ".codex/hooks.json",
-        resolvePlaceholders(getCodexHooksConfig()),
+        resolveCodexHooksConfig(getCodexHooksConfig()),
       );
       const config = getCodexConfigTemplate();
       files.set(`.codex/${config.targetPath}`, config.content);
@@ -474,17 +475,54 @@ export const PLATFORM_MANAGED_DIRS = PLATFORM_IDS.flatMap((id) =>
 /** All directories managed by Trellis (including .trellis itself) */
 export const ALL_MANAGED_DIRS = [".trellis", ...new Set(PLATFORM_MANAGED_DIRS)];
 
+const CODEX_TRELLIS_CONFIG_MARKER =
+  "Project-scoped Codex defaults for Trellis workflows.";
+
+function isTrellisCodexConfigured(cwd: string): boolean {
+  const codexDir = path.join(cwd, AI_TOOLS.codex.configDir);
+  const configPath = path.join(codexDir, "config.toml");
+  const agentsDir = path.join(codexDir, "agents");
+
+  try {
+    if (
+      fs.existsSync(configPath) &&
+      fs
+        .readFileSync(configPath, "utf-8")
+        .includes(CODEX_TRELLIS_CONFIG_MARKER)
+    ) {
+      return true;
+    }
+
+    if (!fs.existsSync(agentsDir)) return false;
+    return fs.readdirSync(agentsDir, { withFileTypes: true }).some((entry) => {
+      return (
+        entry.isFile() &&
+        entry.name.startsWith("trellis-") &&
+        entry.name.endsWith(".toml")
+      );
+    });
+  } catch {
+    return false;
+  }
+}
+
 /**
- * Detect which platforms are configured by checking for configDir existence.
+ * Detect which platforms Trellis configured in the project.
  *
  * Note: Detection uses only `configDir` (the platform-specific directory),
  * NOT shared layers like `.agents/skills/`. This prevents false positives
- * where a shared directory triggers detection of a specific platform.
+ * where a shared directory triggers detection of a specific platform. Codex
+ * additionally requires a Trellis marker because Codex itself owns `.codex/`
+ * runtime data such as session transcripts.
  */
 export function getConfiguredPlatforms(cwd: string): Set<AITool> {
   const platforms = new Set<AITool>();
   for (const id of PLATFORM_IDS) {
-    if (fs.existsSync(path.join(cwd, AI_TOOLS[id].configDir))) {
+    const isConfigured =
+      id === "codex"
+        ? isTrellisCodexConfigured(cwd)
+        : fs.existsSync(path.join(cwd, AI_TOOLS[id].configDir));
+    if (isConfigured) {
       platforms.add(id);
     }
   }

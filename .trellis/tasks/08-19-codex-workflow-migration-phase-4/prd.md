@@ -18,6 +18,8 @@
 
 ## 验收标准
 
-- [ ] skills 在 source、dist、tarball 和目标项目均可达。
-- [ ] 用户配置缺失、正确、含其他 features、格式异常和无权限均有测试。
+- [x] skills 在 source、dist、tarball 和目标项目均可达。2026-08-20 已从最终源码重新 build/pack；验证包位于 `C:\Users\asus\AppData\Local\Temp\trellis-phase4-pack.KJP4Lu\packages\`（CLI/Core beta.31 tgz）。隔离 consumer 以本地 tgz 安装后执行 `init --codex --yes` 成功，生成 `.agents/skills/trellis-start/SKILL.md`、`.agents/skills/trellis-break-loop/SKILL.md`、`.codex/agents/trellis-check.toml` 与 `AGENTS.md`，未生成 `.codex/skills/`。CLI tarball 含 common `start.md`、common `break-loop.md` 与 `codex-user-config.js`，且不含 `templates/codex/skills/` 或开发机 `matt-skills-main` 路径；生成的 `trellis-start` 包含 Switch Gate，不含阶段 5/6 的 review/worktree 内容。
+- [x] 用户配置缺失、正确、含其他 features、格式异常、内联 `features` table、带引号目标键、确认期间变更和无权限均有测试；cc-switch 优先、fallback、拒绝、非交互、dry-run、读写失败均有覆盖。cc-switch 路径的失败/拒绝指引明确指向其 `settings.common_config_codex`，不会把 SQLite 数据库描述为 TOML 文件。
+- [x] hooks 不可用或尚未批准时，Codex 新建项目和 Claude→Codex 增量初始化的 `AGENTS.md` 都提供 `$trellis-start` 降级入口；无 Trellis managed block 的用户文件保持不覆盖，并给出手工入口提示。
+- [x] 仅含 `.codex/sessions/` 等 Codex 运行时数据不会被识别为 Trellis Codex 配置、不会触发用户级写入或被 update 接管；Trellis config 签名或 `trellis-*.toml` agent 标记可恢复识别。
 - [x] 用户已于 2026-08-19 授权：`trellis init/update` 每次展示目标、拟写入项和备份方式并获得显式确认后，可更新用户级 cc-switch 数据库或 `~/.codex/config.toml`；拒绝或失败时降级为提示。

@@ -61,15 +61,59 @@ export function getPythonCommandForPlatform(
  * No-op when the resolved command is `python3` (the template default).
  * Idempotent: running it twice produces the same result.
  */
-export function replacePythonCommandLiterals(content: string): string {
-  const target = getPythonCommandForPlatform();
+function getPythonCommandForShell(): string {
+  const command = getPythonCommandForPlatform();
+  if (!/^[A-Za-z]:[\\/]/.test(command)) return command;
+
+  const normalized = command.replaceAll("\\", "/");
+  return /\s/.test(normalized)
+    ? '"' + normalized.replaceAll('"', '\\"') + '"'
+    : normalized;
+}
+
+const PYTHON3_LITERAL_RE = /(^|[^A-Za-z0-9_./\\-])python3(?=$|[^A-Za-z0-9_./\\-])/g;
+
+function replacePython3Literals(content: string, target: string): string {
   if (target === "python3") return content;
   return content
     .split("\n")
-    .map((line) =>
-      line.startsWith("#!") ? line : line.replaceAll("python3", target),
-    )
+    .map((line) => {
+      if (line.startsWith("#!")) return line;
+      return line.replace(
+        PYTHON3_LITERAL_RE,
+        (_match, prefix: string) => prefix + target,
+      );
+    })
     .join("\n");
+}
+
+export function replacePythonCommandLiteralsForShell(content: string): string {
+  const command = getPythonCommandForPlatform();
+  const target = getPythonCommandForShell();
+  const result = command === target ? content : content.replaceAll(command, target);
+  return replacePython3Literals(result, target);
+}
+
+function escapeTomlBasicStringValue(value: string): string {
+  return value.replaceAll("\\", "\\\\").replaceAll('"', '\\"');
+}
+
+export function replacePythonCommandLiteralsForToml(content: string): string {
+  const command = getPythonCommandForPlatform();
+  const target = escapeTomlBasicStringValue(getPythonCommandForShell());
+  const result = command === target ? content : content.replaceAll(command, target);
+  return replacePython3Literals(result, target);
+}
+
+export function resolveCodexHooksConfig(content: string): string {
+  return content.replaceAll(
+    "{{PYTHON_CMD_JSON}}",
+    JSON.stringify(getPythonCommandForShell()).slice(1, -1),
+  );
+}
+
+export function replacePythonCommandLiterals(content: string): string {
+  return replacePython3Literals(content, getPythonCommandForPlatform());
 }
 
 /**
@@ -181,8 +225,8 @@ export function resolvePlaceholdersNeutral(
   content: string,
   context?: TemplateContext,
 ): string {
-  let result = replacePythonCommandLiterals(
-    content.replace(RE_PYTHON_CMD, getPythonCommandForPlatform()),
+  let result = replacePythonCommandLiteralsForShell(
+    content.replace(RE_PYTHON_CMD, getPythonCommandForShell()),
   );
 
   if (!context) return result;
@@ -512,14 +556,31 @@ export function resolveCodexTrellisStartSkill(
 ): ResolvedTemplate | null {
   const startTemplate = getCommandTemplates().find((t) => t.name === "start");
   if (!startTemplate) return null;
+  const eol = startTemplate.content.includes("\r\n") ? "\r\n" : "\n";
+  const content = startTemplate.content.replace(
+    /^(# Start Session\r?\n\r?\n)/,
+    (heading) =>
+      heading +
+      "When Codex hooks are disabled or unapproved, invoke this skill to manually load the equivalent compact startup context." +
+      eol +
+      eol,
+  );
+  const codexStartContent = content
+    .replace("For the Claude Code path, ", "")
+    .replace(
+      /\r?\n[ ]{2}- Before `task\.py start`,[\s\S]*?(?=\r?\n- \*\*Active task status `in_progress`)/,
+      `${eol}  - Before \`task.py start\`, record the current development strategy in the task documents and only invoke Codex skills and agents installed in this project.`,
+    );
   return {
     name: "trellis-start",
-    content: injectTrellisSwitchGuard(
-      wrapWithSkillFrontmatter(
-        "trellis-start",
-        resolvePlaceholdersNeutral(startTemplate.content, ctx),
+    content: replacePythonCommandLiteralsForShell(
+      injectTrellisSwitchGuard(
+        wrapWithSkillFrontmatter(
+          "trellis-start",
+          resolvePlaceholdersNeutral(codexStartContent, ctx),
+        ),
+        "skill",
       ),
-      "skill",
     ),
   };
 }
@@ -557,10 +618,16 @@ export function collectSkillTemplates(
 ): Map<string, string> {
   const files = new Map<string, string>();
   for (const skill of skills) {
-    files.set(`${skillsRoot}/${skill.name}/SKILL.md`, skill.content);
+    files.set(
+      `${skillsRoot}/${skill.name}/SKILL.md`,
+      replacePythonCommandLiteralsForShell(skill.content),
+    );
   }
   for (const skillFile of bundledSkills) {
-    files.set(`${skillsRoot}/${skillFile.relativePath}`, skillFile.content);
+    files.set(
+      `${skillsRoot}/${skillFile.relativePath}`,
+      replacePythonCommandLiteralsForShell(skillFile.content),
+    );
   }
   return files;
 }
@@ -577,7 +644,7 @@ export async function writeSkills(
     ensureDir(skillDir);
     await writeFile(
       path.join(skillDir, "SKILL.md"),
-      replacePythonCommandLiterals(skill.content),
+      replacePythonCommandLiteralsForShell(skill.content),
     );
   }
   for (const skillFile of bundledSkills) {
@@ -585,7 +652,7 @@ export async function writeSkills(
     ensureDir(path.dirname(targetPath));
     await writeFile(
       targetPath,
-      replacePythonCommandLiterals(skillFile.content),
+      replacePythonCommandLiteralsForShell(skillFile.content),
     );
   }
 }

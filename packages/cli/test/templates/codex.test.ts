@@ -4,7 +4,6 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import {
   getAllAgents,
-  getAllCodexSkills,
   getConfigTemplate,
 } from "../../src/templates/codex/index.js";
 import { resolveAllAsSkills } from "../../src/configurators/shared.js";
@@ -57,12 +56,20 @@ describe("codex getAllAgents", () => {
   });
 });
 
-describe("codex getAllCodexSkills (platform-specific)", () => {
-  it("returns empty after parallel removal", () => {
-    const skills = getAllCodexSkills();
-    expect(skills).toEqual([]);
+describe("codex shared skill source", () => {
+  it("exposes trellis-break-loop from the common template source", () => {
+    const skills = resolveAllAsSkills(AI_TOOLS.codex.templateContext);
+    const breakLoop = skills.find((skill) => skill.name === "trellis-break-loop");
+    const commonSource = fs.readFileSync(
+      path.join(repoRoot, "packages/cli/src/templates/common/skills/break-loop.md"),
+      "utf-8",
+    );
+
+    expect(breakLoop).toBeDefined();
+    expect(breakLoop?.content).toContain(commonSource.trim());
   });
 });
+
 
 describe("codex getConfigTemplate", () => {
   it("returns project config.toml content", () => {
