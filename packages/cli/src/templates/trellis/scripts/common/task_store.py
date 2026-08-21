@@ -19,6 +19,7 @@ import argparse
 import json
 import re
 import sys
+import tempfile
 from datetime import datetime
 from pathlib import Path
 
@@ -54,6 +55,16 @@ from .task_utils import (
     run_task_hooks,
 )
 from .task_workflow import new_unselected_workflow
+from .worktree_sync import (
+    TaskWorktreeError,
+    TaskWorktree,
+    claim_task_worktree,
+    load_task_record,
+    merge_task_worktree,
+    primary_worktree_root,
+    rollback_created_worktree,
+    resolve_task_worktree,
+)
 
 
 # =============================================================================
@@ -697,4 +708,218 @@ def cmd_set_scope(args: argparse.Namespace) -> int:
     write_json(task_json, data)
 
     print(colored(f"✓ Scope set to: {scope}", Colors.GREEN))
+    return 0
+
+
+# =============================================================================
+# Commands: task worktree
+# =============================================================================
+
+def _validate_task_reference(
+    raw_ref: str,
+    invocation_root: Path,
+    target_dir: Path,
+) -> None:
+    """Reject path-like task refs that do not identify this repository's task dir."""
+    normalized = str(raw_ref).replace("\\", "/").strip()
+    path_like = Path(raw_ref).is_absolute() or "/" in normalized or normalized.startswith(".")
+    if not path_like:
+        return
+
+    target_dir = target_dir.resolve()
+    if not target_dir.is_dir() or not (target_dir / FILE_TASK_JSON).is_file():
+        raise TaskWorktreeError(
+            f"Task reference must point to an existing task directory with task.json: {target_dir}"
+        )
+    try:
+        target_repo = get_repo_root(target_dir)
+        invocation_primary = primary_worktree_root(invocation_root)
+        target_primary = primary_worktree_root(target_repo)
+    except TaskWorktreeError as exc:
+        raise TaskWorktreeError(f"Unable to validate task reference '{raw_ref}': {exc}") from exc
+
+    if invocation_primary.resolve() != target_primary.resolve():
+        raise TaskWorktreeError(
+            f"Task reference belongs to another Git repository: {target_dir}"
+        )
+
+    allowed_roots = (
+        target_repo / DIR_WORKFLOW / DIR_TASKS,
+        target_primary / DIR_WORKFLOW / DIR_TASKS,
+    )
+    if not any(target_dir.parent.resolve() == root.resolve() for root in allowed_roots):
+        raise TaskWorktreeError(
+            f"Task reference must point to a direct .trellis/tasks child: {target_dir}"
+        )
+
+
+def _load_worktree_task(args: argparse.Namespace) -> tuple[Path, Path, dict] | None:
+    invocation_root = get_repo_root()
+    target_dir = resolve_task_dir(args.dir, invocation_root)
+    task_dir_name = target_dir.name
+    if not task_dir_name:
+        print(colored(f"Error: task directory is required: {args.dir}", Colors.RED))
+        return None
+
+    try:
+        _validate_task_reference(str(args.dir), invocation_root, target_dir)
+        record = load_task_record(invocation_root, task_dir_name)
+        if record is None and args.dir:
+            normalized = str(args.dir).replace("\\", "/")
+            if "/" not in normalized and not Path(args.dir).is_absolute():
+                try:
+                    primary_root = primary_worktree_root(invocation_root)
+                except TaskWorktreeError:
+                    primary_root = invocation_root
+                found = find_task_by_name(args.dir, get_tasks_dir(primary_root))
+                if found:
+                    task_dir_name = found.name
+                    record = load_task_record(invocation_root, task_dir_name)
+    except TaskWorktreeError as exc:
+        print(colored(f"Error: {exc}", Colors.RED))
+        return None
+
+    if record is None:
+        print(colored(f"Error: task.json not found for task '{task_dir_name}'", Colors.RED))
+        return None
+
+    record_root, task_json, data = record
+    return record_root, task_json.parent, data
+
+
+def _worktree_payload(task_dir_path: Path, worktree: TaskWorktree) -> dict:
+    return {
+        "task_dir": task_dir_path.as_posix(),
+        "worktree_path": str(worktree.root),
+        "branch": worktree.branch,
+        "base_branch": worktree.base_branch,
+        "mode": worktree.mode,
+    }
+
+
+def _task_json_write_preflight(task_json: Path) -> str | None:
+    """Verify the task record and its parent can support an atomic replacement."""
+    try:
+        with task_json.open("r+", encoding="utf-8"):
+            pass
+        with tempfile.NamedTemporaryFile(
+            mode="w",
+            encoding="utf-8",
+            dir=task_json.parent,
+            prefix=f".{task_json.name}.",
+            suffix=".probe",
+            delete=True,
+        ):
+            pass
+    except OSError as exc:
+        return str(exc)
+    return None
+
+
+def cmd_resolve_worktree(args: argparse.Namespace) -> int:
+    """Resolve a task's recorded worktree without changing it."""
+    loaded = _load_worktree_task(args)
+    if loaded is None:
+        return 1
+    repo_root, target_dir, data = loaded
+    try:
+        worktree = resolve_task_worktree(repo_root, target_dir.name, data)
+    except TaskWorktreeError as exc:
+        print(colored(f"Error: {exc}", Colors.RED))
+        return 1
+
+    payload = _worktree_payload(target_dir, worktree)
+    if args.json:
+        print(json.dumps(payload, ensure_ascii=False))
+    else:
+        print(colored("✓ Task worktree resolved", Colors.GREEN))
+        print(f"Task: {payload['task_dir']}")
+        print(f"Actual worktree: {payload['worktree_path']}")
+        print(f"Branch: {payload['branch']}")
+        print(f"Base branch: {payload['base_branch']}")
+        print(f"Mode: {payload['mode']}")
+    return 0
+
+
+def cmd_claim_worktree(args: argparse.Namespace) -> int:
+    """Claim or create the one actual worktree for a task."""
+    invocation_root = get_repo_root()
+    loaded = _load_worktree_task(args)
+    if loaded is None:
+        return 1
+    repo_root, target_dir, data = loaded
+    task_json = target_dir / FILE_TASK_JSON
+    write_error = _task_json_write_preflight(task_json)
+    if write_error:
+        print(
+            colored(
+                f"Error: task.json is not writable; no worktree was created. "
+                f"Restore write access and retry: {task_json} ({write_error})",
+                Colors.RED,
+            )
+        )
+        return 1
+
+    try:
+        updated, worktree = claim_task_worktree(
+            repo_root,
+            target_dir.name,
+            data,
+            path_value=args.path,
+            branch=args.branch,
+            base_branch=args.base_branch,
+            replace_stale=args.replace_stale,
+            invocation_root=invocation_root,
+        )
+    except TaskWorktreeError as exc:
+        print(colored(f"Error: {exc}", Colors.RED))
+        return 1
+
+    if not write_json(task_json, updated):
+        rollback_errors = rollback_created_worktree(repo_root, worktree)
+        rollback_note = ""
+        if rollback_errors:
+            rollback_note = " Rollback warnings: " + " | ".join(rollback_errors)
+        print(
+            colored(
+                "Error: task.json could not be updated after preparing the worktree. "
+                "The newly created worktree was rolled back when possible. "
+                f"Actual worktree: {worktree.root}; branch: {worktree.branch}; "
+                f"base branch: {worktree.base_branch}. Restore write access and retry "
+                f"claim-worktree; the task record was not changed: {task_json}.{rollback_note}",
+                Colors.RED,
+            )
+        )
+        return 1
+
+    payload = _worktree_payload(target_dir, worktree)
+    if args.json:
+        print(json.dumps(payload, ensure_ascii=False))
+    else:
+        print(colored("✓ Task worktree claimed", Colors.GREEN))
+        print(f"Actual worktree: {payload['worktree_path']}")
+        print(f"Branch: {payload['branch']}")
+        print(f"Base branch: {payload['base_branch']}")
+        print(f"Mode: {payload['mode']}")
+    return 0
+
+
+def cmd_merge_worktree(args: argparse.Namespace) -> int:
+    """Merge a task's claimed worktree branch into its base checkout."""
+    loaded = _load_worktree_task(args)
+    if loaded is None:
+        return 1
+    repo_root, target_dir, data = loaded
+    try:
+        message = merge_task_worktree(
+            repo_root,
+            target_dir.name,
+            data,
+            target_path=args.target,
+            no_ff=args.no_ff,
+        )
+    except TaskWorktreeError as exc:
+        print(colored(f"Error: {exc}", Colors.RED))
+        return 1
+    print(colored(f"✓ {message}", Colors.GREEN))
     return 0

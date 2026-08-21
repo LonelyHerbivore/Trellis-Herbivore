@@ -714,20 +714,23 @@ This platform does NOT auto-inject task context via hook. Before doing anything 
 
 Try in order — stop at the first one that yields a task path:
 
-1. **Look at the dispatch prompt** you received from the main agent. If its first line is \`Active task: <path>\` (e.g. \`Active task: .trellis/tasks/04-17-foo\`), use that path. The main agent is required to include this line on class-2 platforms.
+1. **Look at the dispatch prompt** you received from the main agent. Its first two lines must be \`Active task: <path>\` and \`Actual worktree: <path>\`. Use those two recorded values; do not derive a worktree from the task name or your parent cwd.
 2. **Run** \`python3 ./.trellis/scripts/task.py current --source\` and read the \`Current task:\` line.
 3. **If both fail** (no \`Active task:\` line in the prompt and \`task.py current\` returns no task), ask the user which task to work on; do NOT guess.
 
-### Step 1.5: Review-gate task record check
+### Step 1.5: Task record and worktree check
 
-This step applies only to trellis-spec-review, trellis-code-review, trellis-code-architecture-review, and trellis-merge-review. trellis-implement and trellis-check skip it and continue with Step 2 unchanged.
+Before any JSONL, task artifact, or source file, every worker MUST read <task-path>/task.json.
 
-Before any JSONL, task artifact, or source file, a review gate MUST read <task-path>/task.json.
+- Canonicalize the dispatch prompt's Actual worktree path and task.worktree_path. They must match exactly; missing or mismatched values are a task-contract error. Stop and report it to the main agent.
+- task.worktree_path is the only actual worktree. Do not create, switch, nest, or synchronize a worktree.
+- A worker restored with \`fork_turns="none"\` must recover from these two dispatch lines and task.json, never from the parent agent cwd.
+
+This step also has review-gate checks for trellis-spec-review, trellis-code-review, trellis-code-architecture-review, and trellis-merge-review. trellis-implement and trellis-check continue with Step 2 after the worktree check.
 
 - A missing workflow means legacy compatibility; preserve the existing fallback rather than inventing a selection.
 - workflow.selection_status: unselected means planning is incomplete. Stop and report it; do not review.
 - An explicit workflow must be valid. Do not silently treat a malformed structured record as legacy.
-- task.worktree_path is the only actual worktree. Do not create, switch, nest, or synchronize a worktree.
 - Verify that this review gate is enabled and has a run entry before reviewing.
 
 ### Step 2: Load task context from the resolved path

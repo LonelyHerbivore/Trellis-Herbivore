@@ -390,7 +390,7 @@ describe("configurePlatform", () => {
           expect(written).toContain("## Task Contract and Working Directory");
           expect(written).toContain("<task-path>/task.json");
           const taskRecordStep = written.indexOf(
-            "### Step 1.5: Review-gate task record check",
+            "### Step 1.5: Task record and worktree check",
           );
           const taskContextStep = written.indexOf(
             "### Step 2: Load task context from the resolved path",
@@ -398,8 +398,13 @@ describe("configurePlatform", () => {
           expect(taskRecordStep).toBeGreaterThan(-1);
           expect(taskRecordStep).toBeLessThan(taskContextStep);
           expect(written).toContain(
-            "Before any JSONL, task artifact, or source file, a review gate MUST read <task-path>/task.json.",
+            "Before any JSONL, task artifact, or source file, every worker MUST read <task-path>/task.json.",
           );
+          expect(written).toContain("Actual worktree: <path>");
+          expect(written).toContain(
+            "task.worktree_path. They must match exactly",
+          );
+          expect(written).toContain('fork_turns="none"');
         }
         // Original body must still be present (prepend, not replace)
         const originalBody = agent.content

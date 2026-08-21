@@ -133,38 +133,53 @@ def _maybe_sync_trellis_worktree(project_dir: Path) -> str:
         if worktree_sync is None:
             return ""
 
-        detected = worktree_sync.detect_trellis_managed_worktree(project_dir)
-        if not detected:
-            return ""
+        resolved_task = worktree_sync.find_task_for_checkout(project_dir)
+        if resolved_task:
+            record_root, task_dir_name, task_data = resolved_task
+            resolved_roots = worktree_sync.resolve_shared_worktree_roots(
+                record_root,
+                task_dir_name,
+                task_data,
+            )
+        else:
+            detected = worktree_sync.detect_trellis_managed_worktree(project_dir)
+            if not detected:
+                return ""
+            main_root, task_dir_name = detected
+            resolved_roots = (main_root, project_dir)
 
-        main_root, task_dir_name = detected
+        if not resolved_roots:
+            return ""
+        main_root, worktree_root = resolved_roots
+        if worktree_root.resolve() != project_dir.resolve():
+            return ""
+        if main_root.resolve() == worktree_root.resolve():
+            return ""
         notes: list[str] = [
-            f"Detected Trellis-managed worktree: ./.trellis/trellis-worktrees/{task_dir_name}/",
+            f"Actual worktree: {worktree_root}",
         ]
 
-        runtime_synced = worktree_sync.sync_runtime_bundle(main_root, project_dir)
+        runtime_synced = worktree_sync.sync_runtime_bundle(main_root, worktree_root)
         if runtime_synced:
             notes.append(
                 "Bootstrapped runtime bundle from main workspace: "
                 + ", ".join(runtime_synced)
             )
 
-        target_task_dir = worktree_sync.task_dir(project_dir, task_dir_name)
-        if not worktree_sync.has_any_task_artifact(target_task_dir):
-            planning_synced = worktree_sync.sync_task_snapshot(main_root, project_dir, task_dir_name)
-            if planning_synced:
-                notes.append(
-                    "Bootstrapped current task planning snapshot from main workspace: "
-                    + ", ".join(planning_synced)
-                )
+        planning_synced = worktree_sync.sync_task_snapshot(main_root, worktree_root, task_dir_name)
+        if planning_synced:
+            notes.append(
+                "Bootstrapped current task planning snapshot from main workspace: "
+                + ", ".join(planning_synced)
+            )
 
-        drift = worktree_sync.collect_task_drift(main_root, project_dir, task_dir_name)
+        drift = worktree_sync.collect_task_drift(main_root, worktree_root, task_dir_name)
         if drift:
             notes.append(
                 "Planning drift detected between main workspace and worktree: "
                 + _format_changed_paths(drift)
             )
-            if worktree_sync.worktree_has_local_code_changes(project_dir, task_dir_name):
+            if worktree_sync.worktree_has_local_code_changes(worktree_root, task_dir_name):
                 notes.append(
                     "Do NOT auto-overwrite: this worktree has local code changes. "
                     "Explain the conflict first, recommend creating a new Trellis task "
@@ -759,6 +774,9 @@ def _build_compact_current_state(
                 data = json.loads(task_json.read_text(encoding="utf-8"))
                 if isinstance(data, dict):
                     status = str(data.get("status") or "unknown")
+                    worktree_path = data.get("worktree_path")
+                    if isinstance(worktree_path, str) and worktree_path.strip():
+                        lines.append(f"Actual worktree: {worktree_path}")
             except (json.JSONDecodeError, OSError):
                 pass
         lines.append(f"Current task: {_repo_relative(repo_root, task_dir)}; status={status}.")

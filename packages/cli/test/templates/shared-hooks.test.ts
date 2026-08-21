@@ -211,6 +211,8 @@ function runPreToolUseHook(
   hookSpecificOutput?: {
     updatedInput?: Record<string, unknown>;
     additionalContext?: string;
+    permissionDecision?: string;
+    permissionDecisionReason?: string;
   };
   updatedInput?: Record<string, unknown>;
   updated_input?: Record<string, unknown>;
@@ -680,6 +682,77 @@ describe.skipIf(!hasPython())("shared subagent hook worktree isolation fix", () 
 
     expect(result.hookSpecificOutput?.updatedInput?.isolation).toBe("worktree");
     expect(result.hookSpecificOutput?.additionalContext).toBeUndefined();
+  });
+
+  it("denies dispatch when the recorded worktree cannot be resolved", () => {
+    setupMainRepo(repoRoot, taskName, "# prd\\n");
+    const taskJson = path.join(repoRoot, ".trellis", "tasks", taskName, "task.json");
+    const task = JSON.parse(fs.readFileSync(taskJson, "utf-8")) as Record<string, unknown>;
+    task.workflow = {
+      contract: "explicit-selection-v1",
+      worktree_mode: "existing-worktree",
+    };
+    task.worktree_path = path.join(repoRoot, "missing-worktree");
+    task.branch = "missing-branch";
+    task.base_branch = "main";
+    fs.writeFileSync(taskJson, JSON.stringify(task) + "\n");
+    const contextId = setSessionActiveTask(repoRoot, taskName, "invalid-worktree-session");
+
+    const result = runPreToolUseHook(
+      repoRoot,
+      {
+        cwd: repoRoot,
+        tool_name: "Agent",
+        tool_input: {
+          subagent_type: "trellis-implement",
+          prompt: "Implement the requested fix.",
+          isolation: "worktree",
+        },
+      },
+      {
+        CLAUDE_PROJECT_DIR: repoRoot,
+        TRELLIS_CONTEXT_ID: contextId,
+      },
+    );
+
+    expect(result.hookSpecificOutput?.permissionDecision).toBe("deny");
+    expect(result.hookSpecificOutput?.permissionDecisionReason).toContain(
+      "dispatch stopped",
+    );
+    expect(result.hookSpecificOutput?.updatedInput).toBeUndefined();
+  });
+
+  it("denies malformed workflow records instead of falling back to a derived worktree", () => {
+    setupMainRepo(repoRoot, taskName, "# prd\\n");
+    const taskJson = path.join(repoRoot, ".trellis", "tasks", taskName, "task.json");
+    const task = JSON.parse(fs.readFileSync(taskJson, "utf-8")) as Record<string, unknown>;
+    task.workflow = "malformed";
+    task.worktree_path = repoRoot;
+    task.branch = "main";
+    task.base_branch = "main";
+    fs.writeFileSync(taskJson, JSON.stringify(task) + "\n");
+    const contextId = setSessionActiveTask(repoRoot, taskName, "malformed-workflow-session");
+
+    const result = runPreToolUseHook(
+      repoRoot,
+      {
+        cwd: repoRoot,
+        tool_name: "Agent",
+        tool_input: {
+          subagent_type: "trellis-implement",
+          prompt: "Implement the requested fix.",
+        },
+      },
+      {
+        CLAUDE_PROJECT_DIR: repoRoot,
+        TRELLIS_CONTEXT_ID: contextId,
+      },
+    );
+
+    expect(result.hookSpecificOutput?.permissionDecision).toBe("deny");
+    expect(result.hookSpecificOutput?.permissionDecisionReason).toContain(
+      "Task workflow must be a JSON object",
+    );
   });
 });
 

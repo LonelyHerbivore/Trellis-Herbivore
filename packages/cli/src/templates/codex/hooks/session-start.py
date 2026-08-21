@@ -119,6 +119,77 @@ def configure_project_encoding(project_dir: Path) -> None:
         pass
 
 
+def _load_worktree_sync(repo_root: Path):
+    scripts_dir = repo_root / ".trellis" / "scripts"
+    if str(scripts_dir) not in sys.path:
+        sys.path.insert(0, str(scripts_dir))
+    try:
+        from common import worktree_sync  # type: ignore[import-not-found]
+
+        return worktree_sync
+    except Exception:
+        return None
+
+
+def _infer_worktree_task_ref(repo_root: Path) -> str | None:
+    worktree_sync = _load_worktree_sync(repo_root)
+    if worktree_sync is None:
+        return None
+    try:
+        return worktree_sync.infer_managed_worktree_task(repo_root)
+    except Exception:
+        return None
+
+
+def _maybe_sync_trellis_worktree(project_dir: Path) -> str:
+    try:
+        worktree_sync = _load_worktree_sync(project_dir)
+        if worktree_sync is None:
+            return ""
+        resolved_task = worktree_sync.find_task_for_checkout(project_dir)
+        if resolved_task:
+            record_root, task_dir_name, task_data = resolved_task
+            resolved_roots = worktree_sync.resolve_shared_worktree_roots(
+                record_root,
+                task_dir_name,
+                task_data,
+            )
+        else:
+            detected = worktree_sync.detect_trellis_managed_worktree(project_dir)
+            if not detected:
+                return ""
+            main_root, task_dir_name = detected
+            resolved_roots = (main_root, project_dir)
+        if not resolved_roots:
+            return ""
+        main_root, worktree_root = resolved_roots
+        if worktree_root.resolve() != project_dir.resolve():
+            return ""
+        if main_root.resolve() == worktree_root.resolve():
+            return ""
+
+        notes = [f"Actual worktree: {worktree_root}"]
+        runtime_synced = worktree_sync.sync_runtime_bundle(main_root, worktree_root)
+        if runtime_synced:
+            notes.append(
+                "Bootstrapped runtime bundle from main workspace: "
+                + ", ".join(runtime_synced)
+            )
+        planning_synced = worktree_sync.sync_task_snapshot(
+            main_root,
+            worktree_root,
+            task_dir_name,
+        )
+        if planning_synced:
+            notes.append(
+                "Bootstrapped current task planning snapshot from main workspace: "
+                + ", ".join(planning_synced)
+            )
+        return "\n".join(notes)
+    except Exception as exc:
+        return f"Trellis worktree bootstrap warning: {exc}"
+
+
 def _has_curated_jsonl_entry(jsonl_path: Path) -> bool:
     """Return True iff jsonl has at least one row with a ``file`` field.
 
@@ -222,14 +293,14 @@ def _resolve_task_dir(trellis_dir: Path, task_ref: str) -> Path:
 
 def _get_task_status(trellis_dir: Path, hook_input: dict) -> str:
     active = _resolve_active_task(trellis_dir, hook_input)
-    if not active.task_path:
+    task_ref = active.task_path or _infer_worktree_task_ref(trellis_dir.parent)
+    if not task_ref:
         return (
             "Status: NO ACTIVE TASK\n"
             "Next: Classify the current turn and ask for task-creation consent "
             "before creating any Trellis task. For Claude Code workflow requests in natural language, guide the user to `task.py create` first."
         )
 
-    task_ref = active.task_path
     task_dir = _resolve_task_dir(trellis_dir, task_ref)
     if active.stale or not task_dir.is_dir():
         return (
@@ -376,8 +447,9 @@ def _build_compact_current_state(
     lines.append(_format_git_state(repo_root))
 
     active = _resolve_active_task(trellis_dir, hook_input)
-    if active.task_path:
-        task_dir = _resolve_task_dir(trellis_dir, active.task_path)
+    task_ref = active.task_path or _infer_worktree_task_ref(repo_root)
+    if task_ref:
+        task_dir = _resolve_task_dir(trellis_dir, task_ref)
         status = "unknown"
         task_json = task_dir / "task.json"
         if task_json.is_file():
@@ -385,6 +457,9 @@ def _build_compact_current_state(
                 data = json.loads(task_json.read_text(encoding="utf-8"))
                 if isinstance(data, dict):
                     status = str(data.get("status") or "unknown")
+                    worktree_path = data.get("worktree_path")
+                    if isinstance(worktree_path, str) and worktree_path.strip():
+                        lines.append(f"Actual worktree: {worktree_path}")
             except (json.JSONDecodeError, OSError):
                 pass
         lines.append(f"Current task: {_repo_relative(repo_root, task_dir)}; status={status}.")
@@ -481,6 +556,7 @@ def main() -> None:
 
     configure_project_encoding(project_dir)
 
+    worktree_sync_notice = _maybe_sync_trellis_worktree(project_dir)
     trellis_dir = project_dir / ".trellis"
     spec_index_paths = _collect_spec_index_paths(trellis_dir)
 
@@ -497,6 +573,9 @@ Trellis compact SessionStart context. Use it to orient the session; load details
     output.write("<current-state>\n")
     output.write(_build_compact_current_state(trellis_dir, hook_input, spec_index_paths))
     output.write("\n</current-state>\n\n")
+
+    if worktree_sync_notice:
+        output.write(f"<worktree-sync>\n{worktree_sync_notice}\n</worktree-sync>\n\n")
 
     output.write("<trellis-workflow>\n")
     output.write(_build_workflow_toc(trellis_dir / "workflow.md"))

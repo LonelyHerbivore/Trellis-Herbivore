@@ -3,7 +3,7 @@
   "name": "codex-workflow-migration-phase-6",
   "title": "Codex 工作流无缝迁移 - 阶段 6：唯一 worktree 与跨代理复用",
   "description": "",
-  "status": "planning",
+  "status": "completed",
   "dev_type": null,
   "scope": null,
   "package": null,
@@ -11,22 +11,43 @@
   "creator": "codex",
   "assignee": "codex",
   "createdAt": "2026-08-19",
-  "completedAt": null,
+  "completedAt": "2026-08-21",
   "branch": "task/codex-workflow-seamless-migration",
   "base_branch": "main",
   "worktree_path": "D:\\Trellis\\Trellis-0.6.0-beta.17",
-  "commit": null,
+  "commit": "feat(trellis): complete codex workflow migration phase 6",
   "pr_url": null,
   "subtasks": [],
   "children": [],
   "parent": "08-19-codex-workflow-seamless-migration",
   "relatedFiles": [],
-  "notes": "协调会话负责编排和收敛；实施、测试和独立 review 由明确文件边界的执行 agent 完成。",
+  "notes": "协调会话负责编排和收敛；实施、测试和独立 review 由明确文件边界的执行 agent 完成。阶段6已完成唯一worktree、primary task record、跨宿主dispatch、linked claim写回与fail-closed路径校验。",
   "meta": {
     "host_platform": "codex",
     "execution_mode": "subagent-orchestrated",
     "worktree_selection": "current_checkout",
     "development_flow": "default",
-    "review_gate_selection": { "spec-review": "enabled", "code-review": "enabled", "code-architecture-review": "enabled", "merge-review": "enabled" }
+    "review_gate_selection": {
+      "spec-review": "enabled",
+      "code-review": "enabled",
+      "code-architecture-review": "enabled",
+      "merge-review": "enabled"
+    },
+    "review_gate_status": {
+      "spec-review": "pass",
+      "code-review": "pass",
+      "code-architecture-review": "pass",
+      "merge-review": "pass"
+    },
+    "validation": {
+      "targeted_tests": "44 passed",
+      "core_tests": "16 files, 272 passed",
+      "cli_tests": "45 files, 1281 passed, 1 skipped file, 3 skipped tests",
+      "python_compile": "passed",
+      "typecheck": "passed",
+      "build": "passed",
+      "lint": "passed",
+      "diff_check": "passed"
+    }
   }
 }

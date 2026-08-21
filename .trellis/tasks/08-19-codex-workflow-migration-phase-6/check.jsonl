@@ -1,1 +1,2 @@
 {"_example": "Fill with {\"file\": \"<path>\", \"reason\": \"<why>\"}. Put spec/research files only — no code paths. Run `python3 .trellis/scripts/get_context.py --mode packages` to list available specs. Delete this line once real entries are added."}
+{"file": ".trellis/spec/cli/unit-test/conventions.md", "reason": "阶段6 Git worktree 集成测试与 hook 回归测试约束"}

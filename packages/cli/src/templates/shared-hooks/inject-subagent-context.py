@@ -28,6 +28,7 @@ warnings.filterwarnings("ignore")
 
 import json
 import os
+import re
 import sys
 from pathlib import Path
 from typing import Any
@@ -78,6 +79,19 @@ AGENTS_REQUIRE_TASK = (AGENT_IMPLEMENT, *AGENTS_CHECK_CONTEXT)
 AGENTS_ALL = (*AGENTS_REQUIRE_TASK, AGENT_RESEARCH)
 
 
+def _normalize_shell_path(value: str) -> str:
+    """Normalize Git Bash, Cygwin, and WSL drive paths on Windows."""
+    if os.name != "nt":
+        return value
+    path_value = value.strip()
+    for pattern in (r"^/([A-Za-z])/(.*)", r"^/cygdrive/([A-Za-z])/(.*)", r"^/mnt/([A-Za-z])/(.*)"):
+        match = re.match(pattern, path_value)
+        if match:
+            drive, rest = match.groups()
+            return drive.upper() + ":\\\\" + rest.replace("/", "\\\\")
+    return value
+
+
 def find_repo_root(start_path: str) -> str | None:
     """
     Find git repo root from start_path upwards
@@ -85,7 +99,7 @@ def find_repo_root(start_path: str) -> str | None:
     Returns:
         Repo root path, or None if not found
     """
-    current = Path(start_path).resolve()
+    current = Path(_normalize_shell_path(start_path)).resolve()
     while current != current.parent:
         if (current / ".git").exists():
             return str(current)
@@ -126,31 +140,203 @@ def _infer_worktree_task(repo_root: str) -> str | None:
         return None
 
 
-def ensure_shared_worktree_bootstrap(repo_root: str, task_dir: str | None) -> None:
+def _resolve_task_reference(
+    repo_root: Path,
+    task_ref: str,
+    worktree_sync: Any,
+) -> tuple[Path, str] | tuple[None, str]:
+    """Resolve a task ref without discarding its checkout identity."""
+    normalized = _normalize_shell_path(task_ref).strip()
+    candidate = Path(normalized).expanduser()
+    normalized_slash = normalized.replace("\\", "/")
+    if not candidate.is_absolute():
+        if "/" not in normalized_slash and not normalized_slash.startswith("."):
+            candidate = repo_root / DIR_WORKFLOW / "tasks" / candidate
+        elif normalized_slash.startswith("tasks/"):
+            candidate = repo_root / DIR_WORKFLOW / normalized_slash
+        else:
+            candidate = repo_root / candidate
+    candidate = candidate.resolve()
+    if candidate.name == FILE_TASK_JSON:
+        candidate = candidate.parent
+    if not candidate.is_dir():
+        return None, f"Task directory does not exist: {candidate}"
+
+    candidate_repo = find_repo_root(str(candidate))
+    if not candidate_repo:
+        return None, f"Task reference is outside a Git repository: {candidate}"
+
+    try:
+        current_primary = worktree_sync.primary_worktree_root(repo_root)
+        candidate_primary = worktree_sync.primary_worktree_root(Path(candidate_repo))
+    except Exception as exc:
+        # Legacy hook fixtures and older non-worktree repositories may expose
+        # only a .git marker. Preserve task-ref identity checks without making
+        # those projects depend on `git worktree list` metadata.
+        if (
+            Path(candidate_repo).resolve() != repo_root.resolve()
+            or not (repo_root / ".git").is_dir()
+        ):
+            return None, f"Unable to validate task repository: {exc}"
+        current_primary = repo_root
+        candidate_primary = repo_root
+    if current_primary.resolve() != candidate_primary.resolve():
+        return None, f"Task reference belongs to another Git repository: {candidate}"
+
+    allowed_roots = (
+        Path(candidate_repo) / DIR_WORKFLOW / "tasks",
+        candidate_primary / DIR_WORKFLOW / "tasks",
+    )
+    if not any(
+        candidate.parent.resolve() == root.resolve()
+        for root in allowed_roots
+    ):
+        return None, f"Task reference must point to a direct .trellis/tasks child: {candidate}"
+    if not (candidate / FILE_TASK_JSON).is_file():
+        return None, f"Task record is missing: {candidate / FILE_TASK_JSON}"
+
+    primary_task_json = candidate_primary / DIR_WORKFLOW / "tasks" / candidate.name / FILE_TASK_JSON
+    if not primary_task_json.is_file():
+        return None, f"Primary task record is missing: {primary_task_json}"
+
+    return candidate, candidate.name
+
+
+def prepare_task_worktree(
+    repo_root: str,
+    task_dir: str | None,
+) -> tuple[str | None, str | None]:
+    """Resolve the task-recorded worktree and bootstrap only that path."""
     if not task_dir:
-        return
+        return None, "Active task is missing."
 
     worktree_sync = _load_worktree_sync(repo_root)
     if worktree_sync is None:
-        return
+        return None, "Trellis worktree runtime is unavailable."
 
+    invocation_root = Path(repo_root).resolve()
+    resolved_ref, task_dir_name_or_error = _resolve_task_reference(
+        invocation_root,
+        task_dir,
+        worktree_sync,
+    )
+    if resolved_ref is None:
+        return None, task_dir_name_or_error
+    task_dir_path = resolved_ref
+    task_dir_name = task_dir_name_or_error
+
+    try:
+        record = worktree_sync.load_task_record(invocation_root, task_dir_name)
+    except Exception as exc:
+        return None, str(exc)
+    if record is None:
+        task_json = task_dir_path / FILE_TASK_JSON
+        try:
+            task_data = json.loads(task_json.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            return None, f"Task record is unreadable: {task_json}"
+        record_root = invocation_root
+    else:
+        record_root, task_json, task_data = record
+    if not isinstance(task_data, dict):
+        return None, f"Task record is invalid: {task_json}"
+
+    # Legacy task records without a structured workflow keep the old Markdown
+    # strategy and fixed-path bootstrap behavior. Structured records must prove
+    # their recorded worktree and fail closed when that proof is unavailable.
+    if "workflow" not in task_data:
+        resolved = worktree_sync.resolve_shared_worktree_roots(
+            record_root,
+            task_dir_name,
+            task_data,
+        )
+        if not resolved:
+            return None, None
+        main_root, worktree_root = resolved
+        if main_root.resolve() != worktree_root.resolve():
+            worktree_sync.sync_runtime_bundle(main_root, worktree_root)
+            worktree_sync.sync_task_snapshot(main_root, worktree_root, task_dir_name)
+        return str(worktree_root), None
+
+    try:
+        worktree = worktree_sync.resolve_task_worktree(
+            record_root,
+            task_dir_name,
+            task_data,
+        )
+    except Exception as exc:
+        return None, str(exc)
+
+    resolved = worktree_sync.resolve_shared_worktree_roots(
+        record_root,
+        task_dir_name,
+        task_data,
+    )
+    if resolved:
+        main_root, worktree_root = resolved
+        if main_root.resolve() != worktree_root.resolve():
+            worktree_sync.sync_runtime_bundle(main_root, worktree_root)
+            worktree_sync.sync_task_snapshot(main_root, worktree_root, task_dir_name)
+
+    return str(worktree.root), None
+
+
+def ensure_legacy_shared_worktree_bootstrap(repo_root: str, task_dir: str | None) -> None:
+    """Keep the pre-structured-workflow bootstrap path for legacy task records."""
+    if not task_dir:
+        return
+    worktree_sync = _load_worktree_sync(repo_root)
+    if worktree_sync is None:
+        return
     task_dir_name = Path(task_dir).name
-    if not task_dir_name:
-        return
-
     resolved = worktree_sync.resolve_shared_worktree_roots(
         Path(repo_root).resolve(),
         task_dir_name,
     )
     if not resolved:
         return
-
     main_root, worktree_root = resolved
     worktree_sync.sync_runtime_bundle(main_root, worktree_root)
+    worktree_sync.sync_task_snapshot(main_root, worktree_root, task_dir_name)
 
-    target_task_dir = worktree_sync.task_dir(worktree_root, task_dir_name)
-    if not worktree_sync.has_any_task_artifact(target_task_dir):
-        worktree_sync.sync_task_snapshot(main_root, worktree_root, task_dir_name)
+
+def _build_recorded_worktree_conflict_notice(actual_worktree: str) -> str:
+    return (
+        "<trellis-worktree-conflict>\n"
+        "检测到 Claude Code 宿主 isolation=worktree 与 Trellis 记录路径冲突。\n"
+        "Trellis 已在子代理派发前自动移除 `isolation: \"worktree\"`。\n"
+        f"当前子代理必须使用记录路径：{actual_worktree}\n"
+        "</trellis-worktree-conflict>"
+    )
+
+
+def _build_recorded_worktree_conflict_system_message(actual_worktree: str) -> str:
+    return (
+        "Trellis 已自动移除冲突的 isolation=worktree；"
+        f"当前子代理继续使用记录路径：{actual_worktree}"
+    )
+
+
+def _deny_worktree_dispatch(worktree_error: str) -> None:
+    """Stop dispatch when the task record cannot prove one actual worktree."""
+    reason = (
+        "Trellis task worktree validation failed; dispatch stopped. "
+        f"Repair task.json or the recorded worktree and retry: {worktree_error}"
+    )
+    hook_specific_output: dict[str, Any] = {
+        "hookEventName": "PreToolUse",
+        "permissionDecision": "deny",
+        "permissionDecisionReason": reason,
+    }
+    output = {
+        "hookSpecificOutput": hook_specific_output,
+        "permission": "deny",
+        "permissionDecision": "deny",
+        "permissionDecisionReason": reason,
+        "systemMessage": reason,
+    }
+    print(json.dumps(output, ensure_ascii=False))
+    sys.exit(0)
 
 
 def _detect_platform(input_data: dict) -> str | None:
@@ -422,9 +608,13 @@ def get_finish_context(repo_root: str, task_dir: str) -> str:
 
 
 
-def build_implement_prompt(original_prompt: str, context: str) -> str:
+def build_implement_prompt(
+    original_prompt: str,
+    context: str,
+    dispatch_header: str = "",
+) -> str:
     """Build complete prompt for Implement"""
-    return f"""<!-- trellis-hook-injected -->
+    return f"""{dispatch_header}<!-- trellis-hook-injected -->
 # Implement Agent Task
 
 You are the Implement Agent in the Multi-Agent Pipeline.
@@ -457,9 +647,13 @@ All the information you need has been prepared for you:
 - Report list of modified/created files when done"""
 
 
-def build_check_prompt(original_prompt: str, context: str) -> str:
+def build_check_prompt(
+    original_prompt: str,
+    context: str,
+    dispatch_header: str = "",
+) -> str:
     """Build complete prompt for Check"""
-    return f"""<!-- trellis-hook-injected -->
+    return f"""{dispatch_header}<!-- trellis-hook-injected -->
 # Check Agent Task
 
 You are the Check Agent in the Multi-Agent Pipeline (code and cross-layer checker).
@@ -492,9 +686,13 @@ All check specs and dev specs you need:
 - Pay special attention to impact radius analysis (L1-L5)"""
 
 
-def build_finish_prompt(original_prompt: str, context: str) -> str:
+def build_finish_prompt(
+    original_prompt: str,
+    context: str,
+    dispatch_header: str = "",
+) -> str:
     """Build complete prompt for Finish (final check before PR)"""
-    return f"""<!-- trellis-hook-injected -->
+    return f"""{dispatch_header}<!-- trellis-hook-injected -->
 # Finish Agent Task
 
 You are performing the final check before creating a PR.
@@ -535,9 +733,13 @@ Finish checklist and requirements:
 
 
 
-def build_review_prompt(original_prompt: str, context: str) -> str:
+def build_review_prompt(
+    original_prompt: str,
+    context: str,
+    dispatch_header: str = "",
+) -> str:
     """Build complete prompt for read-only review gates."""
-    return f"""<!-- trellis-hook-injected -->
+    return f"""{dispatch_header}<!-- trellis-hook-injected -->
 # Review Gate Task
 
 You are a read-only Trellis review gate.
@@ -1035,7 +1237,7 @@ def main():
         sys.exit(0)
 
     subagent_type, original_prompt, tool_input = _parse_hook_input(input_data)
-    cwd = input_data.get("cwd", os.getcwd())
+    cwd = _normalize_shell_path(str(input_data.get("cwd", os.getcwd())))
 
     # Only handle subagent types we care about
     if subagent_type not in AGENTS_ALL:
@@ -1063,17 +1265,33 @@ def main():
     hook_notice = ""
     hook_system_message = ""
     normalized_tool_input = tool_input
-    shared_worktree_signal = False
+    dispatch_header = ""
+    actual_worktree: str | None = None
+    worktree_error: str | None = None
+
+    if subagent_type in AGENTS_REQUIRE_TASK:
+        actual_worktree, worktree_error = prepare_task_worktree(repo_root, task_dir)
+        assert task_dir is not None  # validated above
+        if worktree_error:
+            _deny_worktree_dispatch(worktree_error)
+        if actual_worktree:
+            dispatch_header = (
+                f"Active task: {task_dir}\n"
+                f"Actual worktree: {actual_worktree}\n\n"
+            )
 
     if platform == "claude" and is_claude_code_dev_agent(subagent_type):
-        shared_worktree_signal = has_shared_worktree_signal(
-            repo_root,
-            task_dir,
-            tool_input,
-            cwd,
-        )
-        if shared_worktree_signal:
-            ensure_shared_worktree_bootstrap(repo_root, task_dir)
+        if actual_worktree:
+            normalized_tool_input, stripped = strip_conflicting_worktree_isolation(tool_input)
+            if stripped:
+                hook_notice = _build_recorded_worktree_conflict_notice(actual_worktree)
+                hook_system_message = _build_recorded_worktree_conflict_system_message(
+                    actual_worktree
+                )
+        elif has_shared_worktree_signal(repo_root, task_dir, tool_input, cwd):
+            # Legacy task records can still describe the old fixed shared path
+            # only in Markdown. Structured records always use the branch above.
+            ensure_legacy_shared_worktree_bootstrap(repo_root, task_dir)
             normalized_tool_input, stripped = strip_conflicting_worktree_isolation(tool_input)
             if stripped:
                 hook_notice = _build_shared_worktree_conflict_notice(task_dir)
@@ -1086,21 +1304,21 @@ def main():
     if subagent_type == AGENT_IMPLEMENT:
         assert task_dir is not None  # validated above
         context = get_implement_context(repo_root, task_dir)
-        new_prompt = build_implement_prompt(original_prompt, context)
+        new_prompt = build_implement_prompt(original_prompt, context, dispatch_header)
     elif subagent_type == AGENT_CHECK:
         assert task_dir is not None  # validated above
         if is_finish_phase:
             # Finish phase: use finish context (lighter, focused on final verification)
             context = get_finish_context(repo_root, task_dir)
-            new_prompt = build_finish_prompt(original_prompt, context)
+            new_prompt = build_finish_prompt(original_prompt, context, dispatch_header)
         else:
             # Regular check phase: use check context (full specs for self-fix loop)
             context = get_check_context(repo_root, task_dir)
-            new_prompt = build_check_prompt(original_prompt, context)
+            new_prompt = build_check_prompt(original_prompt, context, dispatch_header)
     elif subagent_type in AGENTS_REVIEW:
         assert task_dir is not None  # validated above
         context = get_check_context(repo_root, task_dir)
-        new_prompt = build_review_prompt(original_prompt, context)
+        new_prompt = build_review_prompt(original_prompt, context, dispatch_header)
     elif subagent_type == AGENT_RESEARCH:
         # Research can work without task directory
         context = get_research_context(repo_root, task_dir)

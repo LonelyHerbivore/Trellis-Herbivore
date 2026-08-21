@@ -17,6 +17,14 @@
 
 ## 验收标准
 
-- [ ] 四种选择场景、跨宿主/agent 同路径和 `fork_turns="none"` 恢复均有测试。
-- [ ] 路径无效、删除、归属冲突或分支不匹配给出可恢复错误。
-- [ ] 同一任务不会创建两个 Trellis-managed worktree。
+- [x] 四种选择场景、跨宿主/agent 同路径和 `fork_turns="none"` 恢复均有测试。
+- [x] 路径无效、删除、归属冲突或分支不匹配给出可恢复错误。
+- [x] 同一任务不会创建两个 Trellis-managed worktree。
+
+## 阶段 6 验收记录
+
+- 三重 review gate：spec-review、code-review、code-architecture-review 均 PASS。
+- linked checkout 的 task record、claim 与 merge 均锚定 primary checkout；primary
+  task.json 缺失或损坏时 fail-closed。
+- 定向 worktree/hook 测试：44 passed；Core 测试：272 passed。
+- 最终验证：typecheck、build、lint、CLI 全量测试均通过；结果详见 `handoff.md`。

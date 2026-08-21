@@ -55,6 +55,9 @@ from common.task_store import (
     cmd_set_scope,
     cmd_add_subtask,
     cmd_remove_subtask,
+    cmd_resolve_worktree,
+    cmd_claim_worktree,
+    cmd_merge_worktree,
 )
 from common.task_context import (
     cmd_add_context,
@@ -316,6 +319,9 @@ Usage:
   python3 task.py set-branch <dir> <branch>          Set git branch
   python3 task.py set-base-branch <dir> <branch>     Set PR target branch
   python3 task.py set-scope <dir> <scope>            Set scope for PR title
+  python3 task.py resolve-worktree <dir> [--json]    Resolve recorded task worktree
+  python3 task.py claim-worktree <dir> [options]     Claim or create task worktree
+  python3 task.py merge-worktree <dir> [options]     Merge task worktree branch
   python3 task.py archive <task-dir>                 Archive completed task
   python3 task.py add-subtask <parent> <child>       Link child task to parent
   python3 task.py remove-subtask <parent> <child>    Unlink child from parent
@@ -335,6 +341,9 @@ Examples:
   python3 task.py create "Child task" --slug child --parent .trellis/tasks/01-21-parent
   python3 task.py add-context <dir> implement .trellis/spec/cli/backend/auth.md "Auth guidelines"
   python3 task.py set-branch <dir> task/add-login
+  python3 task.py resolve-worktree <dir> --json
+  python3 task.py claim-worktree <dir> --branch task/add-login
+  python3 task.py merge-worktree <dir> --no-ff
   python3 task.py start .trellis/tasks/01-21-add-login
   python3 task.py current --source
   python3 task.py finish
@@ -443,6 +452,61 @@ def main() -> int:
     p_scope.add_argument("dir", help="Task directory")
     p_scope.add_argument("scope", help="Scope name")
 
+    # task worktree
+    p_resolve_worktree = subparsers.add_parser(
+        "resolve-worktree",
+        help="Resolve the recorded task worktree without changing it",
+    )
+    p_resolve_worktree.add_argument("dir", help="Task directory")
+    p_resolve_worktree.add_argument(
+        "--json",
+        action="store_true",
+        help="Print the resolved worktree record as JSON",
+    )
+
+    p_claim_worktree = subparsers.add_parser(
+        "claim-worktree",
+        help="Claim or create the one actual worktree for a task",
+    )
+    p_claim_worktree.add_argument("dir", help="Task directory")
+    p_claim_worktree.add_argument(
+        "--path",
+        help="Existing worktree path or optional new-worktree path",
+    )
+    p_claim_worktree.add_argument(
+        "--branch",
+        help="Task branch; must match existing worktrees",
+    )
+    p_claim_worktree.add_argument(
+        "--base-branch",
+        help="Base branch for a new worktree and eventual merge",
+    )
+    p_claim_worktree.add_argument(
+        "--replace-stale",
+        action="store_true",
+        help="Allow replacing a stale recorded path only when it is safe",
+    )
+    p_claim_worktree.add_argument(
+        "--json",
+        action="store_true",
+        help="Print the claimed worktree record as JSON",
+    )
+
+    p_merge_worktree = subparsers.add_parser(
+        "merge-worktree",
+        help="Merge a task worktree branch into its base checkout",
+    )
+    p_merge_worktree.add_argument("dir", help="Task directory")
+    p_merge_worktree.add_argument(
+        "--target",
+        help="Target checkout path; defaults to the primary worktree",
+    )
+    p_merge_worktree.add_argument(
+        "--no-ff",
+        action="store_true",
+        help="Pass --no-ff to git merge",
+    )
+
     # archive
     p_archive = subparsers.add_parser("archive", help="Archive task")
     p_archive.add_argument("name", help="Task directory or name")
@@ -484,6 +548,9 @@ def main() -> int:
         "set-branch": cmd_set_branch,
         "set-base-branch": cmd_set_base_branch,
         "set-scope": cmd_set_scope,
+        "resolve-worktree": cmd_resolve_worktree,
+        "claim-worktree": cmd_claim_worktree,
+        "merge-worktree": cmd_merge_worktree,
         "archive": cmd_archive,
         "add-subtask": cmd_add_subtask,
         "remove-subtask": cmd_remove_subtask,
