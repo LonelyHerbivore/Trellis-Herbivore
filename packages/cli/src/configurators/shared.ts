@@ -718,6 +718,18 @@ Try in order — stop at the first one that yields a task path:
 2. **Run** \`python3 ./.trellis/scripts/task.py current --source\` and read the \`Current task:\` line.
 3. **If both fail** (no \`Active task:\` line in the prompt and \`task.py current\` returns no task), ask the user which task to work on; do NOT guess.
 
+### Step 1.5: Review-gate task record check
+
+This step applies only to trellis-spec-review, trellis-code-review, trellis-code-architecture-review, and trellis-merge-review. trellis-implement and trellis-check skip it and continue with Step 2 unchanged.
+
+Before any JSONL, task artifact, or source file, a review gate MUST read <task-path>/task.json.
+
+- A missing workflow means legacy compatibility; preserve the existing fallback rather than inventing a selection.
+- workflow.selection_status: unselected means planning is incomplete. Stop and report it; do not review.
+- An explicit workflow must be valid. Do not silently treat a malformed structured record as legacy.
+- task.worktree_path is the only actual worktree. Do not create, switch, nest, or synchronize a worktree.
+- Verify that this review gate is enabled and has a run entry before reviewing.
+
 ### Step 2: Load task context from the resolved path
 
 1. Read \`<task-path>/${jsonl}\` — JSONL list of spec/research files relevant to this agent.
@@ -765,15 +777,23 @@ export function injectPullBasedPreludeToml(
   return content.replace(re, `$1$2${prelude}`);
 }
 
-/** Best-effort detect agent type from filename ("trellis-implement.md" → "implement").
- *  Returns null for research and unknown names — they skip the prelude.
+/** Best-effort detect the context bucket from an agent filename.
+ *  Research and unknown names skip the prelude; review gates reuse check.jsonl.
  */
 export function detectSubAgentType(name: string): SubAgentType | null {
   const base = name.replace(/\.(md|toml|prompt\.md)$/, "");
-  if (base === "trellis-implement" || base === "trellis-check") {
-    return base === "trellis-implement" ? "implement" : "check";
+  switch (base) {
+    case "trellis-implement":
+      return "implement";
+    case "trellis-check":
+    case "trellis-spec-review":
+    case "trellis-code-review":
+    case "trellis-code-architecture-review":
+    case "trellis-merge-review":
+      return "check";
+    default:
+      return null;
   }
-  return null;
 }
 
 /** Shared transform: given a list of agents, prepend pull-based prelude to

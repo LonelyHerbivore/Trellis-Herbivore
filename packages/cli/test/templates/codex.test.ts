@@ -12,10 +12,21 @@ import { AI_TOOLS } from "../../src/types/ai-tools.js";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(__dirname, "../../../..");
 
+const REVIEW_AGENTS = [
+  ["trellis-spec-review", "spec-review"],
+  ["trellis-code-review", "code-review"],
+  ["trellis-code-architecture-review", "code-architecture-review"],
+  ["trellis-merge-review", "merge-review"],
+] as const;
+
 const EXPECTED_AGENT_NAMES = [
   "trellis-check",
+  "trellis-code-architecture-review",
+  "trellis-code-review",
   "trellis-implement",
+  "trellis-merge-review",
   "trellis-research",
+  "trellis-spec-review",
 ];
 
 // Shared skills are now sourced from common/ via resolveAllAsSkills
@@ -54,6 +65,37 @@ describe("codex getAllAgents", () => {
       expect(agent.content).toContain("developer_instructions = ");
     }
   });
+});
+
+describe("codex read-only review agents", () => {
+  for (const [agentName, gate] of REVIEW_AGENTS) {
+    it(agentName + " keeps the task, read-only, and report contract", () => {
+      const agent = getAllAgents().find(({ name }) => name === agentName);
+      const content = agent?.content ?? "";
+
+      expect(agent).toBeDefined();
+      expect(content).toContain('name = "' + agentName + '"');
+      expect(content).toContain('sandbox_mode = "read-only"');
+      expect(content).toContain("MUST NOT spawn another `trellis-check`");
+      expect(content.toLowerCase()).toContain("workflow-state breadcrumbs");
+      expect(content).toContain("<task-path>/task.json");
+      expect(content).toContain("task.worktree_path");
+      expect(content).toContain("`" + gate + "`");
+      expect(content).toContain("legacy task");
+      expect(content).toContain("`unselected`");
+      expect(content).toContain("disabled gate");
+      expect(content).toContain("The main session writes");
+      expect(content).toContain("**Result: PASS / FAIL**");
+      expect(content).toContain("`<file>:<line>`");
+      expect(content).toContain("### Blocking Issues");
+      expect(content).toContain("### Suggested Next Actions");
+      expect(content).toContain("### Verification Results");
+      expect(content).toMatch(/\[features\][\s\S]*?multi_agent\s*=\s*false/);
+      expect(content).toMatch(
+        /\[features\.multi_agent_v2\][\s\S]*?enabled\s*=\s*false/,
+      );
+    });
+  }
 });
 
 describe("codex shared skill source", () => {

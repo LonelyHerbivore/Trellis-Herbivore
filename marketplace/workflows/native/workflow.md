@@ -191,7 +191,8 @@ Planning order for this Claude Code path: `task.py create` → `trellis-research
 Before `trellis-grill-me` is complete, do not enter development strategy decisions, do not create or complete `design.md` / `implement.md`, and do not run `task.py start`.
 Do not enter development strategy decisions until `prd.md` has been tightened through repository-first clarification and one-question-at-a-time follow-up.
 At the Claude Code development strategy decision point, prefer the native `AskUserQuestion` tool instead of plain Markdown prompts. Every `AskUserQuestion` question must have 2–4 options; do not put all five optional review gates in one question. Use structured questions for development/workspace mode, flow/architecture guidance, core review gates with `multiSelect: true`, and add-on review gates with `multiSelect: true`. Core review gates are `trellis-spec-review`, `trellis-code-review`, and `trellis-code-architecture-review`; add-on review gates are `trellis-improve-codebase-architecture` and `trellis-merge-review`. Do not offer default review-gate packages; let the user directly multi-select enabled gates, then write the explicit enabled/disabled lists. If `AskUserQuestion` is unavailable, rejected, or the user chooses Other, fall back to a text `A.` / `B.` / `C.` block or targeted free-text follow-up, but ask only for unresolved fields and never repeat answered choices unchanged.
-Before `task.py start`, record the development strategy decisions in the task documents. Complex tasks should store them in `implement.md`: development mode (current session / subagent), branch vs worktree, default flow vs TDD, plus a single `A.` / `B.` / `C.` style strategy block that records the task-level selection for `trellis-spec-review`, `trellis-code-review`, `trellis-code-architecture-review`, `trellis-improve-codebase-architecture`, and `trellis-merge-review`. New tasks must stamp that block with `Review-gate contract: explicit-selection-v1`. Use `Optional review gates status: pending` only while the choice is still open; before `task.py start`, replace it with `Optional review gates status: configured` plus explicit `Enabled optional review gates:` and `Disabled optional review gates:` lists. If the user does not select any optional gate, still record all five in the disabled list and keep `trellis-check` fixed outside the optional set. Only tasks that entirely lack `Review-gate contract: explicit-selection-v1` count as legacy tasks and preserve the old behavior; if the marker exists but the configured enabled/disabled lists are missing, planning is incomplete and the task must not start. `trellis-improve-codebase-architecture` deep-review requires `trellis-code-architecture-review`; do not record or accept deep-review without that prerequisite gate. If the strategy is `subagent + worktree`, pin the shared path to `./.trellis/trellis-worktrees/<task-dir-name>` and require every code-development subagent to use it. If the strategy is TDD, record `trellis-tdd` as the reference flow. Record whether to run pre-development architecture guidance in that same strategy block. If guidance is enabled, record `架构审查：enabled` in `implement.md`, dispatch `trellis-improve-codebase-architecture` with `架构审查模式: guidance` before `task.py start`, and append its output to `design.md`, but do NOT implicitly enable `trellis-improve-codebase-architecture` deep-review; that gate still requires explicit selection in the same task-level review-gate set.
+Before `task.py start`, record the development strategy decisions in the task documents. Complex tasks should store them in `implement.md`: development mode (current session / subagent), branch vs worktree, default flow vs TDD, plus a single `A.` / `B.` / `C.` style strategy block that records the task-level selection for `trellis-spec-review`, `trellis-code-review`, `trellis-code-architecture-review`, `trellis-improve-codebase-architecture`, and `trellis-merge-review`. New tasks must stamp that block with `Review-gate contract: explicit-selection-v1`. Use `Optional review gates status: pending` only while the choice is still open; before `task.py start`, replace it with `Optional review gates status: configured` plus explicit `Enabled optional review gates:` and `Disabled optional review gates:` lists. If the user does not select any optional gate, still record all five in the disabled list and keep `trellis-check` fixed outside the optional set. Only tasks that entirely lack `Review-gate contract: explicit-selection-v1` count as legacy tasks and preserve the old behavior; if the marker exists but the configured enabled/disabled lists are missing, planning is incomplete and the task must not start. `trellis-improve-codebase-architecture` deep-review requires `trellis-code-architecture-review`; do not record or accept deep-review without that prerequisite gate. If the strategy is `subagent + worktree`, record the user's chosen actual directory in `task.worktree_path` and require every code-development subagent to use that recorded path; do not derive or replace it from `<task-dir-name>`. If the strategy is TDD, record `trellis-tdd` as the reference flow. Record whether to run pre-development architecture guidance in that same strategy block. If guidance is enabled, record `架构审查：enabled` in `implement.md`, dispatch `trellis-improve-codebase-architecture` with `架构审查模式: guidance` before `task.py start`, and append its output to `design.md`, but do NOT implicitly enable `trellis-improve-codebase-architecture` deep-review; that gate still requires explicit selection in the same task-level review-gate set.
+Machine-readable selection is mandatory for new tasks. Before `task.py start`, write `{TASK_DIR}/task.json.workflow` as `explicit-selection-v1`: host, execution mode, worktree mode, development flow, a complete enabled/disabled partition of `spec-review`, `code-review`, `code-architecture-review`, and `merge-review`, plus a pending run for every enabled gate. Set `task.worktree_path` to the chosen actual directory. Missing `workflow` is legacy compatibility only; do not treat an unselected or invalid structured workflow as a legacy task.
 [/workflow-state:planning]
 
 <!-- Per-turn breadcrumb: shown throughout Phase 1 when codex.dispatch_mode=inline.
@@ -205,6 +206,7 @@ Load `trellis-brainstorm`; stay in planning.
 Lightweight: `prd.md` can be enough. Complex: finish `prd.md`, `design.md`, and `implement.md`; ask for review before `task.py start`.
 Multi-deliverable scope: consider a parent task plus independently verifiable child tasks; dependencies must be written in child artifacts, not implied by tree position.
 Inline mode: skip jsonl curation; Phase 2 reads artifacts/specs via `trellis-before-dev`.
+Machine-readable selection is mandatory for new tasks. Before `task.py start`, write `{TASK_DIR}/task.json.workflow` as `explicit-selection-v1`: host, execution mode, worktree mode, development flow, a complete enabled/disabled partition of `spec-review`, `code-review`, `code-architecture-review`, and `merge-review`, plus a pending run for every enabled gate. Set `task.worktree_path` to the chosen actual directory. Missing `workflow` is legacy compatibility only; do not treat an unselected or invalid structured workflow as a legacy task.
 [/workflow-state:planning-inline]
 
 ### Phase 2: Execute
@@ -223,15 +225,15 @@ Inline mode: skip jsonl curation; Phase 2 reads artifacts/specs via `trellis-bef
 Sub-agent dispatch protocol applies to all platforms and all sub-agents, including class-2 Codex/Copilot/Gemini/Qoder and `trellis-research`: every dispatch prompt starts with `Active task: <task path from task.py current>` before role-specific instructions.
 
 [workflow-state:in_progress]
-Flow: `trellis-implement` -> `trellis-check` -> `trellis-update-spec` -> archive or commit as needed -> merge if needed -> optional `trellis-merge-review` -> build/test -> `/trellis:finish-work`.
-Claude Code optional review gates: if the task artifacts carry `Review-gate contract: explicit-selection-v1`, preserve the configured selection. Keep any enabled `trellis-spec-review`, `trellis-code-review`, and `trellis-code-architecture-review` in that order, run `trellis-improve-codebase-architecture` and `trellis-merge-review` only when the task strategy explicitly enables them, and keep `trellis-check` fixed outside this optional set. New tasks that use this contract must record `Optional review gates status: configured` plus explicit enabled/disabled lists; if the user picks none, record all five optional gates as disabled. Only tasks that entirely lack the contract marker count as legacy tasks and preserve the old behavior.
+Flow: `trellis-implement` -> `trellis-check` -> enabled `spec-review` -> enabled `code-review` -> enabled `code-architecture-review` -> `trellis-update-spec` -> archive or commit as needed -> merge if needed -> enabled `merge-review` -> build/test -> `/trellis:finish-work`.
+Review gates are host-neutral. Read `<task-path>/task.json` first: a missing `workflow` is a legacy task and preserves the existing `trellis-check` compatibility path; `workflow.selection_status: unselected` means planning is incomplete; `workflow.contract: explicit-selection-v1` is the structured `Review-gate contract: explicit-selection-v1` and must contain a valid enabled/disabled partition plus runs for every enabled gate. Legacy Markdown records may still say `Optional review gates status: configured` with explicit enabled/disabled lists; do not silently reinterpret an invalid structured record as legacy.
+For an explicit task, execute only enabled gate keys in this fixed order: `spec-review` -> `code-review` -> `code-architecture-review`; run `merge-review` only after integration and before final build/test. Disabled gates are not dispatched. `trellis-check` remains outside this structured set and is never a substitute for an enabled read-only review gate. `trellis-improve-codebase-architecture` remains a separately selected strategy capability; it requires `code-architecture-review` but is not an extra `workflow.review_gates` key.
 Main-session default: dispatch implement/check sub-agents. Sub-agent self-exemption: if already running as `trellis-implement`, do NOT spawn another `trellis-implement` or `trellis-check`; if already running as `trellis-check`, do NOT spawn another `trellis-check` or `trellis-implement`. Dispatch is main session only.
 Dispatch prompt starts with `Active task: <task path from task.py current>`. Read context: jsonl entries -> `prd.md` -> `design.md if present` -> `implement.md if present`.
 
-Claude review gates are read-only gates. They report PASS / FAIL, blocking issues, and suggested next actions; they do not modify code directly.
-If a Claude review gate fails, the main agent repairs the code, then re-runs the same gate before advancing.
-For any enabled `trellis-spec-review`, `trellis-code-review`, `trellis-code-architecture-review`, and `trellis-merge-review`, count repeated failures per gate and per task. If the same gate blocks the same task more than 3 times in a row, the main agent must briefly report that status to the user, re-check whether the requirements have drifted, and ask whether to skip the current review gate.
-If the chosen strategy is `subagent + worktree`, all code-development subagents must use the same `./.trellis/trellis-worktrees/<task-dir-name>` path.
+Every enabled review gate is an independent read-only agent on hosts that provide one, including Claude Code and Codex. It returns PASS / FAIL, `file:line` findings, blocking issues, suggested next actions, and verification results; it does not modify code or task artifacts. The main session writes the returned report to `<task-path>/reports/<gate>.md`, then updates `workflow.review_gates.runs[<gate>]` with `status`, `attempts`, and the task-relative report path.
+Do not advance to the next gate until the previous gate passes. On FAIL, the main session repairs the code and re-runs the same gate. Count the consecutive FAIL results for that gate in its `attempts`; at 3 consecutive FAILs, report the blockage to the user, re-check whether requirements have drifted, and ask whether to mark the current gate skipped. Never skip it implicitly.
+If the chosen strategy is `subagent + worktree`, all code-development subagents must read `task.worktree_path` from `<task-path>/task.json` and use that recorded path as the sole working directory; do not derive or replace it from `<task-dir-name>`.
 If the chosen strategy is TDD, align implementation and review expectations to `trellis-tdd`.
 If the task strategy enables `trellis-improve-codebase-architecture` and the work is architecture-sensitive or enters structural refactoring, route the architecture pass through `trellis-improve-codebase-architecture` before widening the change.
 If the task strategy enables `trellis-improve-codebase-architecture`, after `trellis-code-architecture-review` passes dispatch `trellis-improve-codebase-architecture` with `架构审查模式: deep-review` plus the changed file list from `git diff --name-only <base_branch>...HEAD`. On failure, report blocking issues and return to `trellis-implement`; re-run the full review loop until deep-review passes. `trellis-improve-codebase-architecture` deep-review requires `trellis-code-architecture-review`; if the task artifacts enable deep-review without that prerequisite gate, treat the strategy record as invalid and repair the task artifacts before continuing. Guidance recorded in `implement.md` is independent and does not by itself enable or block deep-review.
@@ -244,8 +246,9 @@ If the user asks to archive the current task, do not block on commit; archive is
      instead of dispatching sub-agents. -->
 
 [workflow-state:in_progress-inline]
-Flow: `trellis-before-dev` -> edit -> `trellis-check` -> validation -> `trellis-update-spec` -> archive or commit as needed -> `/trellis:finish-work`.
-Do not dispatch implement/check sub-agents in inline mode.
+Flow: `trellis-before-dev` -> edit -> `trellis-check` -> enabled read-only review gates -> validation -> `trellis-update-spec` -> archive or commit as needed -> merge if needed -> enabled `merge-review` -> build/test -> `/trellis:finish-work`.
+Do not dispatch implement/check sub-agents in inline mode. Inline only means that the main session implements directly; it does not skip an enabled review gate or turn `trellis-check` into a substitute for one.
+Read `<task-path>/task.json` before review dispatch. For an explicit `Review-gate contract: explicit-selection-v1`, delegate each enabled `spec-review`, `code-review`, and `code-architecture-review` gate in order to an independent read-only review agent; delegate enabled `merge-review` only after integration and before final build/test. The main session writes each returned report to `<task-path>/reports/<gate>.md` and updates its run state. A missing `workflow` is legacy compatibility; an unselected or invalid structured workflow stops the review loop.
 Read context: `prd.md` -> `design.md if present` -> `implement.md if present`, plus relevant spec/research loaded by skills.
 If the user asks to archive the current task, do not block on commit; archive is allowed even when code is not committed.
 [/workflow-state:in_progress-inline]
@@ -382,7 +385,7 @@ brainstorm skill 会指导你：
 - 如果用户没有选中任何可选 gate，也要把这 5 个 gate 全部写进 disabled 列表；`trellis-check` 固定保留在这组之外。
 - 只有完全缺少 `Review-gate contract: explicit-selection-v1` 标记的任务才视为 legacy task，并沿用旧行为；如果标记已存在但缺少 configured 的 enabled/disabled 列表，说明 planning 未完成，不能启动任务。
 - `trellis-improve-codebase-architecture` deep-review 依赖 `trellis-code-architecture-review`；不要记录或接受只开 deep-review、不开号 architecture-review 的组合。
-- 如果选择 `subagent + worktree`，将 `./.trellis/trellis-worktrees/<task-dir-name>` 固定为所有代码开发子代理共享的路径。
+- 如果选择 `subagent + worktree`，将用户选定的实际目录写入 `task.worktree_path`，并要求所有代码开发子代理使用该记录路径；不得从 `<task-dir-name>` 推导或覆盖它。
 - 如果选择 TDD，记录 `trellis-tdd` 作为参考流程，并让后续实现与评审都对齐到它。
 - 如果启用了 pre-development architecture guidance，在 `task.py start` 之前运行 `trellis-improve-codebase-architecture` guidance 并把结果追加到 `design.md`；但这不会隐式开启 `trellis-improve-codebase-architecture` deep-review，后者仍需在 review-gate 选择里显式启用。
 
@@ -518,7 +521,7 @@ python3 ./.trellis/scripts/task.py start <task-dir>
 - **Task description**: Implement the reviewed task artifacts, consulting materials under `{TASK_DIR}/research/`; finish by running project lint and type-check
 - **Dispatch prompt guard**: Tell the spawned agent it is already the `trellis-implement` sub-agent and must implement directly, not spawn another `trellis-implement` / `trellis-check`.
 - **Claude Code permission note**: `trellis-implement` carries `permissionMode: acceptEdits` so the normal foreground implement path can edit without per-write confirmation. If the parent Claude session runs under a host-constrained mode such as `auto`, actual permission behavior still follows the host.
-- **Claude Code worktree note**: Trellis shared `subagent + worktree` means the sub-agent should stay on `./.trellis/trellis-worktrees/<task-dir-name>`. This is different from Claude Code host isolation via `Agent(..., isolation: "worktree")`; when the two conflict, the Claude hook auto-removes that isolation input and reports the correction.
+- **Claude Code worktree note**: Trellis shared `subagent + worktree` means the sub-agent uses the recorded `task.worktree_path`. This is different from Claude Code host isolation via `Agent(..., isolation: "worktree")`; the main session must not let host isolation override the recorded path and must report a conflict before dispatch.
 
 平台 hook / plugin 会自动处理：The platform hook/plugin auto-handles:
 - 读取 `implement.jsonl`，把引用的 spec / research 文件注入子代理 prompt。Reads `implement.jsonl`, injecting referenced spec / research files into the sub-agent prompt.
@@ -568,40 +571,43 @@ Codex 子代理定义会自动处理上下文加载。The Codex sub-agent defini
 
 [Claude Code, Cursor, OpenCode, codex-sub-agent, Kiro, Gemini, Qoder, CodeBuddy, Copilot, Droid, Pi]
 
-对于 Claude Code 路径，实现完成后按任务策略运行显式选中的 review gate。
+所有宿主遵守同一 review-gate 合同；差异只在各宿主调用本地 agent 的方式。实现完成后，主会话先读取 `{TASK_DIR}/task.json`：
 
-- 若启用了 `trellis-spec-review`、`trellis-code-review`、`trellis-code-architecture-review`，保持这个顺序：
+- 缺少 `workflow` 的任务是 legacy task，保留现有 `trellis-check` 兼容路径。
+- `workflow.selection_status: unselected` 表示 planning 未完成，不能进入 review。
+- 显式任务必须使用 `workflow.contract: explicit-selection-v1`；其 `enabled` / `disabled` 必须完整分区四个 gate，且 `runs` 只包含 enabled gate。不能把格式错误的 structured task 静默降级成 legacy。
+- 显式 enabled 核心 gate 固定顺序为：
 
-1. `trellis-spec-review`
-2. `trellis-code-review`
-3. `trellis-code-architecture-review`
+1. `spec-review`（对应 `trellis-spec-review`）
+2. `code-review`（对应 `trellis-code-review`）
+3. `code-architecture-review`（对应 `trellis-code-architecture-review`）
 
-- 如果任务文档带有 `Review-gate contract: explicit-selection-v1`，则严格按 `Optional review gates status: configured`、`Enabled optional review gates:`、`Disabled optional review gates:` 执行。
-- `trellis-improve-codebase-architecture` 与 `trellis-merge-review` 只有在任务策略显式启用时才运行。
-- 对新任务，如果用户没有选择任何可选 gate，也要把这 5 个 gate 全部显式写进 disabled 列表；`trellis-check` 继续固定保留。
-- 只有完全缺少 `Review-gate contract: explicit-selection-v1` 标记的任务才视为 legacy task，并沿用旧行为。
-- 如果标记已存在但缺少 configured 的 enabled/disabled 列表，或出现只开 `trellis-improve-codebase-architecture` deep-review、不启用 `trellis-code-architecture-review` 的组合，则任务策略无效，必须先修复任务文档再继续。
+- `merge-review`（对应 `trellis-merge-review`）只在合并后、最终 build/test 前执行；disabled gate 不分派。
+- `trellis-improve-codebase-architecture` 是独立策略能力，不是 `workflow.review_gates` 的第五个 key；它需要 `code-architecture-review` 已启用并通过。
 
-Do not advance to the next gate until the previous gate passes. Each enabled gate must review the code against `prd.md`, `design.md` if present, `implement.md` if present, and the relevant specs; on FAIL, the main agent fixes the blocking issues and re-runs the same gate before continuing.
-If the same enabled gate blocks the same task more than 3 times in a row, the main agent must briefly report that status to the user, re-check whether the requirements have drifted, and ask whether to skip the current review gate.
+每个 enabled gate 都由独立、只读的 review agent 执行：读取 `{TASK_DIR}/check.jsonl`、任务产物、`task.json` 和 `worktree_path`，输出 PASS / FAIL、带 `file:line` 的 Findings、Blocking Issues、Suggested Next Actions 和验证结果。review agent 不直接修改代码、任务或报告；主会话将返回的 Markdown 写入 `{TASK_DIR}/reports/<gate>.md`，并更新 `workflow.review_gates.runs[<gate>]` 的 `status`、`attempts`、`report_path`。
 
-如果当前平台还没有专用的 review-gate agent，则继续使用 `trellis-check` 作为兼容回退：
+Do not advance to the next gate until the previous gate passes. On FAIL, the main agent fixes the blocking issues and re-runs the same gate. `attempts` records this gate's consecutive review attempts; after 3 consecutive FAILs, the main agent must report the blockage to the user, re-check requirement drift, and ask whether to mark the current gate skipped. Never skip a gate implicitly.
+
+如果当前平台没有专用的只读 review-gate agent，`trellis-check` 仅作为 legacy 兼容回退：
 
 - **Agent type**: `trellis-check`
 - **Task description**: Review all code changes against specs and task artifacts; report findings to the main session; ensure lint and type-check pass
 - **Dispatch prompt guard**: Tell the spawned agent it is already the `trellis-check` sub-agent and must review/report directly, not spawn another `trellis-check` / `trellis-implement`.
 
-check 子代理的职责：
-- 对照 spec 审查代码改动
-- 对照 `prd.md`、`design.md if present`、`implement.md if present` 审查代码改动
-- 向主 agent 报告阻塞项和建议动作
-- 运行 lint 和 typecheck 验证
+`trellis-check` 保持原有 workspace-write/self-fix 职责，不能替代 Claude Code 或 Codex 已启用的独立只读 gate。
 
 [/Claude Code, Cursor, OpenCode, codex-sub-agent, Kiro, Gemini, Qoder, CodeBuddy, Copilot, Droid, Pi]
 
 [codex-inline, Kilo, Antigravity, Windsurf]
 
-加载 `trellis-check` skill，并按其指导验证代码：
+主会话可以直接实现代码，但 inline 不会跳过 enabled review gate：
+
+- 先读取 `{TASK_DIR}/task.json`，按显式 `workflow.review_gates` 的 `spec-review` -> `code-review` -> `code-architecture-review` 顺序分派独立、只读 review agent；合并后、最终 build/test 前再分派 enabled `merge-review`。
+- 不分派 implement/check 子代理不等于可以自审或用 `trellis-check` 替代 enabled gate。
+- 每个 review 返回后由主会话写入 `{TASK_DIR}/reports/<gate>.md` 并更新对应 run；legacy、unselected 和 invalid 的处理与上面的共享合同一致。
+
+加载 `trellis-check` skill 做默认质量检查：
 - spec 合规性
 - lint / type-check / tests
 - 跨层一致性（当改动跨层时）
@@ -714,7 +720,7 @@ AI 会驱动一次按批次组织的提交，让 `/finish-work` 后续能在干�
    - 无遗漏文件
    - 合并目标分支状态与 `prd.md` 验收标准对齐
    - `trellis-merge-review` 只负责只读审查与阻塞报告，不直接修复合并结果。
-   - 如果 `trellis-merge-review` 返回 FAIL，由主 agent 修复问题后重新执行此步骤；若同一 gate 在同一任务中连续阻塞超过 3 次，由主 agent 升级给用户重新核对需求并询问是否跳过当前 review。
+   - 如果 `trellis-merge-review` 返回 FAIL，由主 agent 修复问题后重新执行此步骤；若同一 gate 在同一任务中连续 3 次 FAIL，由主 agent 升级给用户重新核对需求并询问是否标记当前 gate 为 skipped。
 
 3. **编译 + 测试**：如果启用了 `trellis-merge-review`，则在该 gate 返回 PASS 后执行；如果未启用，则在合并完成后直接执行项目的编译命令与完整测试套件。
    - 编译 + 测试全部通过，才允许进入 3.6。

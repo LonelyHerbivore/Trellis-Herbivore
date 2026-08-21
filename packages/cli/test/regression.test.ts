@@ -76,7 +76,7 @@ afterEach(() => {
 describe("regression: workflow archive without commit", () => {
   it("[workflow] in_progress breadcrumb allows archive without commit", () => {
     expect(workflowMdTemplate).toContain(
-      "archive or commit as needed -> `/trellis:finish-work`",
+      "archive or commit as needed -> merge if needed -> enabled `merge-review` -> build/test -> `/trellis:finish-work`",
     );
     expect(workflowMdTemplate).toContain(
       "do not block on commit; archive is allowed even when code is not committed.",
@@ -3198,7 +3198,7 @@ print(len(entries))
     }
   });
 
-  it("[issue-237] all implement/check agent templates contain recursion guards", () => {
+  it("[issue-237] all implement/check/review agent templates contain recursion guards", () => {
     const templateRoot = path.join(
       path.dirname(fileURLToPath(import.meta.url)),
       "..",
@@ -3215,6 +3215,10 @@ print(len(entries))
       "codebuddy/agents/trellis-check.md",
       "codex/agents/trellis-implement.toml",
       "codex/agents/trellis-check.toml",
+      "codex/agents/trellis-spec-review.toml",
+      "codex/agents/trellis-code-review.toml",
+      "codex/agents/trellis-code-architecture-review.toml",
+      "codex/agents/trellis-merge-review.toml",
       "cursor/agents/trellis-implement.md",
       "cursor/agents/trellis-check.md",
       "gemini/agents/trellis-implement.md",
@@ -3279,6 +3283,10 @@ print(len(entries))
     const codexAgentFiles = [
       "codex/agents/trellis-implement.toml",
       "codex/agents/trellis-check.toml",
+      "codex/agents/trellis-spec-review.toml",
+      "codex/agents/trellis-code-review.toml",
+      "codex/agents/trellis-code-architecture-review.toml",
+      "codex/agents/trellis-merge-review.toml",
       "codex/agents/trellis-research.toml",
     ];
 
@@ -4982,8 +4990,8 @@ describe("regression: cross-platform-thinking-guide dead code removed (0.3.1)", 
 describe("regression: class-2 platforms use pull-based sub-agent context", () => {
   // Class 2: gemini, qoder, codex, copilot — hooks can't reliably inject
   // sub-agent prompts, so sub-agents Read jsonl/prd themselves.
-  // implement/check get the pull-based prelude; research does not (it
-  // searches the spec tree and has no task-level context dependency).
+  // Task-bound implement/check/review roles get the pull-based prelude;
+  // research does not because it searches the spec tree without task context.
   const class2 = [
     {
       id: "qoder" as const,
@@ -5009,6 +5017,10 @@ describe("regression: class-2 platforms use pull-based sub-agent context", () =>
       preludeAgents: [
         ".codex/agents/trellis-implement.toml",
         ".codex/agents/trellis-check.toml",
+        ".codex/agents/trellis-spec-review.toml",
+        ".codex/agents/trellis-code-review.toml",
+        ".codex/agents/trellis-code-architecture-review.toml",
+        ".codex/agents/trellis-merge-review.toml",
       ],
       nonPreludeAgents: [".codex/agents/trellis-research.toml"],
     },
@@ -5042,7 +5054,7 @@ describe("regression: class-2 platforms use pull-based sub-agent context", () =>
         expect(hooks).not.toContain("inject-subagent-context.py");
       });
 
-      it("implement/check definitions contain pull-based prelude", () => {
+      it("task-bound definitions contain pull-based prelude", () => {
         for (const file of preludeAgents) {
           const content = fs.readFileSync(path.join(tmpDir, file), "utf-8");
           expect(content).toContain("Required: Load Trellis Context First");

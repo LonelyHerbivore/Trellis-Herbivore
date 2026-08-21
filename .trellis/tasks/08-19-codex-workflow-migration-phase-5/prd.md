@@ -8,6 +8,7 @@
 
 - 新增 spec-review、code-review、code-architecture-review、merge-review 四个 Codex agent。
 - 每个 agent 从 task record 读取 worktree 和 gate 选择，输出统一 PASS/FAIL、证据、阻塞项和下一步，并落盘至 `.trellis/`。
+- Claude Code 与 Codex 对同一 `task.json.workflow` 使用相同的 gate 选择、legacy/invalid 边界和报告合同；只保留各宿主的调用与上下文注入差异。
 - shared workflow 按 spec -> code -> architecture 顺序执行 enabled gate；FAIL 由主 agent 修复并重跑当前 gate；inline 不隐式跳过。
 
 ## 通用工程约束
@@ -17,6 +18,6 @@
 
 ## 验收标准
 
-- [ ] inventory、权限、prelude、递归防护和输出合同测试通过。
-- [ ] enabled、disabled、legacy 与非法合同组合均覆盖。
-- [ ] Claude/Codex 对同一 fixture 的 gate 顺序一致。
+- [x] inventory、权限、prelude、递归防护和输出合同测试通过。
+- [x] enabled、disabled、legacy 与非法合同组合均覆盖。
+- [x] Claude/Codex 对同一 fixture 的 gate 顺序一致。

@@ -30,7 +30,7 @@ Execute these steps:
    cat .trellis/spec/guides/index.md
    ```
 
-7. If the task artifacts record a development strategy, follow it before writing code: keep `subagent + worktree` work on the shared `./.trellis/trellis-worktrees/<task-dir-name>` path, and if the task selected TDD, align your development flow to `trellis-tdd`.
+7. If the task artifacts record a development strategy, read `<task-path>/task.json` before writing code. For `subagent + worktree`, `task.worktree_path` is the sole working directory; use the recorded path and do not derive or override it from `<task-dir-name>`. If the task selected TDD, align your development flow to `trellis-tdd`.
 
 8. If the task artifacts explicitly enable pre-development architecture guidance, run the task through `trellis-improve-codebase-architecture` guidance before widening the refactor. Architecture sensitivity or structural cleanup can justify recommending guidance during planning, but they do not implicitly enable it during execution.
 

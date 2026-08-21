@@ -3,7 +3,7 @@
   "name": "codex-workflow-migration-phase-5",
   "title": "Codex 工作流无缝迁移 - 阶段 5：review agents 与共享合同",
   "description": "",
-  "status": "planning",
+  "status": "completed",
   "dev_type": null,
   "scope": null,
   "package": null,
@@ -11,11 +11,11 @@
   "creator": "codex",
   "assignee": "codex",
   "createdAt": "2026-08-19",
-  "completedAt": null,
+  "completedAt": "2026-08-21",
   "branch": "task/codex-workflow-seamless-migration",
   "base_branch": "main",
   "worktree_path": "D:\\Trellis\\Trellis-0.6.0-beta.17",
-  "commit": null,
+  "commit": "feat(trellis): complete codex workflow migration phase 5",
   "pr_url": null,
   "subtasks": [],
   "children": [],
@@ -26,7 +26,28 @@
     "host_platform": "codex",
     "execution_mode": "subagent-orchestrated",
     "worktree_selection": "current_checkout",
+    "development_flow": "default"
+  },
+  "workflow": {
+    "contract": "explicit-selection-v1",
+    "host": "codex",
+    "execution_mode": "subagent",
+    "worktree_mode": "current-checkout",
     "development_flow": "default",
-    "review_gate_selection": { "spec-review": "enabled", "code-review": "enabled", "code-architecture-review": "enabled", "merge-review": "enabled" }
+    "review_gates": {
+      "enabled": [
+        "spec-review",
+        "code-review",
+        "code-architecture-review",
+        "merge-review"
+      ],
+      "disabled": [],
+      "runs": {
+        "spec-review": { "status": "PASS", "attempts": 3, "report_path": "reports/spec-review.md" },
+        "code-review": { "status": "PASS", "attempts": 3, "report_path": "reports/code-review.md" },
+        "code-architecture-review": { "status": "PASS", "attempts": 3, "report_path": "reports/code-architecture-review.md" },
+        "merge-review": { "status": "PASS", "attempts": 1, "report_path": "reports/merge-review.md" }
+      }
+    }
   }
 }

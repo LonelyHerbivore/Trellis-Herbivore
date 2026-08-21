@@ -394,6 +394,18 @@ describe("init() integration", () => {
         path.join(tmpDir, ".codex", "agents", "trellis-check.toml"),
       ),
     ).toBe(true);
+    for (const reviewAgent of [
+      "trellis-spec-review",
+      "trellis-code-review",
+      "trellis-code-architecture-review",
+      "trellis-merge-review",
+    ]) {
+      expect(
+        fs.existsSync(
+          path.join(tmpDir, ".codex", "agents", reviewAgent + ".toml"),
+        ),
+      ).toBe(true);
+    }
     // parallel skill removed — platform-native worktree features used instead
     expect(fs.existsSync(path.join(tmpDir, ".codex", "hooks.json"))).toBe(true);
     expect(
@@ -417,6 +429,16 @@ describe("init() integration", () => {
     const trackedPaths = Object.keys(hashes).map((p) => p.replace(/\\/g, "/"));
     expect(trackedPaths).toContain(".agents/skills/trellis-start/SKILL.md");
     expect(trackedPaths).toContain(".agents/skills/trellis-break-loop/SKILL.md");
+    for (const reviewAgent of [
+      "trellis-spec-review",
+      "trellis-code-review",
+      "trellis-code-architecture-review",
+      "trellis-merge-review",
+    ]) {
+      expect(trackedPaths).toContain(
+        ".codex/agents/" + reviewAgent + ".toml",
+      );
+    }
     expect(
       trackedPaths.some((trackedPath) => trackedPath.startsWith(".codex/skills/")),
     ).toBe(false);

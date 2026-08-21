@@ -165,29 +165,49 @@ describe("getAllAgents", () => {
       expect(content).toContain("trellis-code-architecture-review");
       expect(content).toContain("trellis-merge-review");
       expect(content).toContain("legacy task");
+      expect(content).toContain("<task-path>/task.json");
+      expect(content).toContain("`task.worktree_path` is the sole worktree path");
+      expect(content).toContain("do not derive or override it from task Markdown");
+      expect(content).toContain("do not create, switch, nest, or synchronize a worktree");
+      expect(content).not.toContain(
+        "stay on the shared `./.trellis/trellis-worktrees",
+      );
     }
   });
 
-  it("Claude review-gate agents validate the explicit gate contract and deep-review prerequisite", () => {
+  it("Claude review-gate agents use the task record as the shared gate contract", () => {
     const agents = new Map(
       getAllAgents().map((agent) => [agent.name, agent.content]),
     );
     const reviewGates = [
-      "trellis-spec-review",
-      "trellis-code-review",
-      "trellis-code-architecture-review",
-      "trellis-merge-review",
+      ["trellis-spec-review", "spec-review"],
+      ["trellis-code-review", "code-review"],
+      ["trellis-code-architecture-review", "code-architecture-review"],
+      ["trellis-merge-review", "merge-review"],
     ] as const;
 
-    for (const name of reviewGates) {
+    for (const [name, gate] of reviewGates) {
       const content = agents.get(name);
       expect(content).toBeDefined();
-      expect(content).toContain("## Strategy Alignment");
-      expect(content).toContain("Review-gate contract: explicit-selection-v1");
-      expect(content).toContain("Optional review gates status: configured");
-      expect(content).toContain("verify that `");
-      expect(content).toContain("trellis-code-architecture-review");
-      expect(content).toContain("legacy task");
+      expect(content).toContain("<task-path>/task.json");
+      expect(content).toContain("The task record is authoritative");
+      expect(content).toContain("workflow.selection_status: unselected");
+      expect(content).toContain(`disabled \`${gate}\` gate`);
+      expect(content).toContain("Missing `workflow` is legacy compatibility");
+      expect(content).toContain("## Read-Only Boundary");
+      expect(content).toContain(
+        "Do not edit product code, task artifacts, `task.json`, reports, or configuration.",
+      );
+      expect(content).toContain("Return the Markdown report only.");
+      expect(content).toContain(`<task-path>/reports/${gate}.md`);
+      expect(content).toContain(`workflow.review_gates.runs.${gate}`);
+      expect(content).toContain("`task.worktree_path` is the sole worktree path");
+      expect(content).toContain("do not derive or override it from task Markdown");
+      expect(content).not.toContain("stay on the shared `./.trellis/trellis-worktrees");
+      expect(content).toContain("### Findings");
+      expect(content).toContain("### Blocking Issues");
+      expect(content).toContain("### Suggested Next Actions");
+      expect(content).toContain("### Verification Results");
     }
   });
 });

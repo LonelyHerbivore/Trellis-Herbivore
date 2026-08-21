@@ -372,15 +372,35 @@ describe("configurePlatform", () => {
       const agentPath = path.join(codexAgentsRoot, `${agent.name}.toml`);
       expect(fs.existsSync(agentPath)).toBe(true);
       const written = fs.readFileSync(agentPath, "utf-8");
-      // Codex is a class-2 (pull-based) platform. Prelude is injected into
-      // implement/check only — research is orthogonal (searches spec tree,
-      // no task dependency) and must stay pristine.
-      const needsPrelude = ["trellis-implement", "trellis-check"].includes(
-        agent.name,
-      );
+      // Codex is a class-2 (pull-based) platform. Task-bound implement,
+      // check, and review agents receive the shared prelude; research remains
+      // pristine because it searches the spec tree without an active task.
+      const needsPrelude = [
+        "trellis-implement",
+        "trellis-check",
+        "trellis-spec-review",
+        "trellis-code-review",
+        "trellis-code-architecture-review",
+        "trellis-merge-review",
+      ].includes(agent.name);
       if (needsPrelude) {
         expect(written).toContain("Required: Load Trellis Context First");
         expect(written).toContain("task.py current --source");
+        if (agent.name.includes("review")) {
+          expect(written).toContain("## Task Contract and Working Directory");
+          expect(written).toContain("<task-path>/task.json");
+          const taskRecordStep = written.indexOf(
+            "### Step 1.5: Review-gate task record check",
+          );
+          const taskContextStep = written.indexOf(
+            "### Step 2: Load task context from the resolved path",
+          );
+          expect(taskRecordStep).toBeGreaterThan(-1);
+          expect(taskRecordStep).toBeLessThan(taskContextStep);
+          expect(written).toContain(
+            "Before any JSONL, task artifact, or source file, a review gate MUST read <task-path>/task.json.",
+          );
+        }
         // Original body must still be present (prepend, not replace)
         const originalBody = agent.content
           .split("developer_instructions")[1]

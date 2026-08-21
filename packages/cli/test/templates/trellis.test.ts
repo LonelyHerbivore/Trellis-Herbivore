@@ -2,6 +2,17 @@ import { describe, expect, it } from "vitest";
 import fs from "node:fs";
 import path from "node:path";
 import {
+  WORKFLOW_REVIEW_GATES,
+  emptyTaskRecord,
+  taskRecordSchema,
+} from "trellis-hgl-core/task";
+import { getAllAgents as getClaudeAgents } from "../../src/templates/claude/index.js";
+import { getAllAgents as getCodexAgents } from "../../src/templates/codex/index.js";
+import {
+  getCommandTemplates,
+  getSkillTemplates,
+} from "../../src/templates/common/index.js";
+import {
   scriptsInit,
   commonInit,
   commonPaths,
@@ -47,6 +58,33 @@ describe("trellis template constants", () => {
     gitignoreTemplate,
   };
 
+  function explicitReviewFixture(host: "claude" | "codex") {
+    return {
+      contract: "explicit-selection-v1",
+      host,
+      execution_mode: "subagent",
+      worktree_mode: "current-checkout",
+      development_flow: "default",
+      review_gates: {
+        enabled: ["merge-review", "code-review", "spec-review"],
+        disabled: ["code-architecture-review"],
+        runs: {
+          "merge-review": { status: "pending", attempts: 0, report_path: null },
+          "code-review": { status: "pending", attempts: 0, report_path: null },
+          "spec-review": { status: "pending", attempts: 0, report_path: null },
+        },
+      },
+    } as const;
+  }
+
+  function taskRecordWithWorkflow(workflow: unknown): Record<string, unknown> {
+    return {
+      ...emptyTaskRecord(),
+      worktree_path: "D:\\actual-worktree",
+      workflow,
+    };
+  }
+
   function inProgressBreadcrumb(): string {
     const inProgressMatch = /\[workflow-state:in_progress\]([\s\S]*?)\[\/workflow-state:in_progress\]/.exec(
       workflowMdTemplate,
@@ -59,7 +97,8 @@ describe("trellis template constants", () => {
 
   function workflowStateBreadcrumb(status: string): string {
     const match = new RegExp(
-      `\\[workflow-state:${status}\\]([\\s\\S]*?)\\[/workflow-state:${status}\\]`,
+      `^\\[workflow-state:${status}\\]\\r?\\n([\\s\\S]*?)^\\[/workflow-state:${status}\\]`,
+      "m",
     ).exec(workflowMdTemplate);
     if (!match) {
       throw new Error(`${status} breadcrumb block must exist in workflow.md`);
@@ -169,17 +208,94 @@ describe("trellis template constants", () => {
     expect(block).toContain("main session only");
   });
 
-  it("workflow.md in_progress breadcrumb records optional review gates and final verification reachability", () => {
+  it("workflow.md in_progress breadcrumb records host-neutral review gates and final verification reachability", () => {
     const block = inProgressBreadcrumb();
-    expect(block).toContain("optional review gates");
+    expect(block).toContain("Review gates are host-neutral");
+    expect(block).toContain("Claude Code and Codex");
     expect(block).toContain("trellis-merge-review");
     expect(block).toContain("Review-gate contract: explicit-selection-v1");
     expect(block).toContain("Optional review gates status: configured");
+    expect(block).toContain("workflow.review_gates.runs[<gate>]");
+    expect(block).toContain("reports/<gate>.md");
+    expect(block).toContain("at 3 consecutive FAILs");
     expect(block).toContain("trellis-check");
     expect(block).toContain("merge if needed");
     expect(block).toContain("build/test");
     expect(block).toContain("trellis-code-architecture-review");
     expect(block).toContain("does not by itself enable or block deep-review");
+  });
+
+  it("Claude and Codex publish the same review-gate contract", () => {
+    const fixtureDispatches = (["claude", "codex"] as const).map((host) => {
+      const parsed = taskRecordSchema.parse(
+        taskRecordWithWorkflow(explicitReviewFixture(host)),
+      );
+      const workflow = parsed.workflow;
+      if (workflow === undefined || "selection_status" in workflow) {
+        throw new Error(`${host} fixture must use explicit review-gate selection`);
+      }
+      return WORKFLOW_REVIEW_GATES.filter((gate) =>
+        workflow.review_gates.enabled.includes(gate),
+      ).map((gate) => "trellis-" + gate);
+    });
+    expect(fixtureDispatches).toEqual([
+      ["trellis-spec-review", "trellis-code-review", "trellis-merge-review"],
+      ["trellis-spec-review", "trellis-code-review", "trellis-merge-review"],
+    ]);
+
+    const enabled = [
+      "spec-review",
+      "code-review",
+      "code-architecture-review",
+    ] as const;
+    const disabledGate = "merge-review";
+    const block = inProgressBreadcrumb();
+    const gateIndexes = enabled.map((gate) => block.indexOf("`" + gate + "`"));
+    expect(gateIndexes[0]).toBeGreaterThan(-1);
+    expect(gateIndexes[1]).toBeGreaterThan(gateIndexes[0] ?? -1);
+    expect(gateIndexes[2]).toBeGreaterThan(gateIndexes[1] ?? -1);
+    expect(block).toContain("Disabled gates are not dispatched.");
+    expect(block).toContain("legacy task");
+    expect(block).toContain("workflow.selection_status: unselected");
+    expect(block).toContain("invalid structured record");
+
+    const hostAgents = [
+      ["Claude", getClaudeAgents()],
+      ["Codex", getCodexAgents()],
+    ] as const;
+
+    for (const [host, agents] of hostAgents) {
+      const contents = new Map(agents.map((agent) => [agent.name, agent.content]));
+      for (const gate of enabled) {
+        const content = contents.get("trellis-" + gate) ?? "";
+        expect(content, host + " should define the " + gate + " gate").toContain(
+          "<task-path>/task.json",
+        );
+        expect(content).toContain("workflow.selection_status");
+        expect(content).toContain("legacy");
+        expect(content).toContain("`" + gate + "`");
+        expect(content).toMatch(/malformed structured workflow|incomplete or invalid/);
+        expect(content).toContain("## Read-Only Boundary");
+        expect(content).toContain("Return the Markdown report only.");
+        expect(content).toContain("<task-path>/reports/" + gate + ".md");
+        expect(content).toContain("workflow.review_gates.runs." + gate);
+      }
+
+      const disabledContent = contents.get("trellis-" + disabledGate) ?? "";
+      expect(disabledContent, host + " should define the disabled gate").toContain(
+        "`" + disabledGate + "`",
+      );
+      expect(disabledContent).toContain("disabled");
+      expect(disabledContent).toMatch(/blocks this review|must not be dispatched/);
+      expect(disabledContent).toContain("## Read-Only Boundary");
+      expect(disabledContent).toContain("Return the Markdown report only.");
+      expect(disabledContent).toContain(
+        "<task-path>/reports/" + disabledGate + ".md",
+      );
+      expect(disabledContent).toContain(
+        "workflow.review_gates.runs." + disabledGate,
+      );
+    }
   });
 
   it("[issue-237] workflow.md Phase 2 dispatch steps require prompt recursion guards", () => {
@@ -280,7 +396,9 @@ describe("trellis template constants", () => {
     const planning = workflowStateBreadcrumb("planning");
     expect(planning).toContain("development mode");
     expect(planning).toContain("branch vs worktree");
-    expect(planning).toContain("./.trellis/trellis-worktrees/<task-dir-name>");
+    expect(planning).toContain("task.worktree_path");
+    expect(planning).toContain("chosen actual directory");
+    expect(planning).not.toContain("./.trellis/trellis-worktrees/<task-dir-name>");
     expect(planning).toContain("trellis-tdd");
     expect(planning).toContain("A.` / `B.` / `C.`");
     expect(planning).toContain("trellis-merge-review");
@@ -292,6 +410,32 @@ describe("trellis template constants", () => {
     expect(planning).toContain("pre-development architecture guidance");
     expect(planning).toContain("trellis-code-architecture-review");
     expect(planning).toContain("do NOT implicitly enable `trellis-improve-codebase-architecture` deep-review");
+    expect(planning).toContain("Machine-readable selection is mandatory for new tasks");
+    expect(planning).toContain("{TASK_DIR}/task.json.workflow");
+    expect(planning).toContain(
+      "do not treat an unselected or invalid structured workflow as a legacy task",
+    );
+  });
+
+  it("shared templates keep task.worktree_path as the sole selected worktree", () => {
+    expect(workflowMdTemplate).toContain("task.worktree_path");
+    expect(workflowMdTemplate).not.toContain(
+      "./.trellis/trellis-worktrees/<task-dir-name>",
+    );
+
+    const commonTemplates = new Map(
+      [...getCommandTemplates(), ...getSkillTemplates()].map((template) => [
+        template.name,
+        template.content,
+      ]),
+    );
+    for (const name of ["start", "brainstorm", "before-dev"]) {
+      const content = commonTemplates.get(name) ?? "";
+      expect(content, name + " should use task.worktree_path").toContain(
+        "task.worktree_path",
+      );
+      expect(content).not.toContain("./.trellis/trellis-worktrees/<task-dir-name>");
+    }
   });
 
   it("workflow.md planning breadcrumb requires native AskUserQuestion for Claude Code development strategy", () => {
@@ -316,22 +460,40 @@ describe("trellis template constants", () => {
     expect(step).toContain("只补齐未决字段");
   });
 
-  it("workflow.md step 2.2 explains selected review gates and preserved order", () => {
+  it("workflow.md step 2.2 explains the shared review-gate contract and preserved order", () => {
     const step = stepSection("2.2");
-    expect(step).toContain("按任务策略运行显式选中的 review gate");
+    expect(step).toContain("所有宿主遵守同一 review-gate 合同");
+    expect(step).toContain("{TASK_DIR}/task.json");
     expect(step).toContain("trellis-spec-review");
     expect(step).toContain("trellis-code-review");
     expect(step).toContain("trellis-code-architecture-review");
     expect(step).toContain("trellis-improve-codebase-architecture");
     expect(step).toContain("trellis-merge-review");
-    expect(step).toContain("Review-gate contract: explicit-selection-v1");
-    expect(step).toContain("Optional review gates status: configured");
+    expect(step).toContain("explicit-selection-v1");
     expect(step).toContain("legacy task");
-    expect(step).toContain("任务策略无效");
+    expect(step).toContain("不能把格式错误的 structured task 静默降级成 legacy");
     expect(step).toContain("Do not advance to the next gate until the previous gate passes");
-    expect(step).toContain("the main agent fixes the blocking issues and re-runs the same gate");
-    expect(step).toContain("more than 3 times in a row");
-    expect(step).toContain("ask whether to skip the current review gate");
+    expect(step).toContain("after 3 consecutive FAILs");
+    expect(step).toContain("Never skip a gate implicitly");
+    expect(step).toContain("{TASK_DIR}/reports/<gate>.md");
+    expect(step).toContain("inline 不会跳过 enabled review gate");
+  });
+
+  it("workflow.md in_progress-inline keeps the same enabled gate order", () => {
+    const inline = workflowStateBreadcrumb("in_progress-inline");
+    expect(inline).toContain("does not skip an enabled review gate");
+    expect(inline).toContain("`spec-review`, `code-review`, and `code-architecture-review` gate in order");
+    expect(inline).toContain("independent read-only review agent");
+    expect(inline).toContain("reports/<gate>.md");
+    expect(inline).toContain("merge-review");
+    expect(inline).toContain("before final build/test");
+  });
+
+  it("workflow.md planning-inline requires machine-readable selection before start", () => {
+    const planningInline = workflowStateBreadcrumb("planning-inline");
+    expect(planningInline).toContain("Machine-readable selection is mandatory for new tasks");
+    expect(planningInline).toContain("{TASK_DIR}/task.json.workflow");
+    expect(planningInline).toContain("invalid structured workflow");
   });
 
   it("gitignoreTemplate contains ignore patterns", () => {
