@@ -27,11 +27,11 @@
 
 ## 验收标准
 
-- [ ] 三种 fresh init、两个方向的增量启用、重复 init/update 和 legacy Codex upgrade 均由集成测试覆盖。
-- [ ] 共享入口规则、task 状态、skills、review 合同和唯一 worktree 规则在两个宿主下语义一致。
-- [ ] 打包后的 CLI/core tgz 能在无源码、无 `matt-skills-main` 的干净目录完成最小双端工作流。
-- [ ] 最终集成完成 spec-review、code-review、code-architecture-review、merge-review、build、test、typecheck、lint、pack 和 clean-install E2E。
-- [ ] 十个阶段均具有独立验收证据、中文交接记录和对应 Git 提交。
+- [x] 三种 fresh init、两个方向的增量启用、重复 init/update 和 legacy Codex upgrade 均由集成测试覆盖。
+- [x] 共享入口规则、task 状态、skills、review 合同和唯一 worktree 规则在两个宿主下语义一致。
+- [x] 打包后的 CLI/core tgz 能在无源码、无 `matt-skills-main` 的干净目录完成最小双端工作流。
+- [x] 最终集成完成 spec-review、code-review、code-architecture-review、merge-review、build、test、typecheck、lint、pack 和 clean-install E2E。
+- [x] 十个阶段均具有独立验收证据、中文交接记录和对应 Git 提交。
 
 ## 阶段任务
 

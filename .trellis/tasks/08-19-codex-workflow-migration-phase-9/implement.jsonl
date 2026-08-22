@@ -1,1 +1,3 @@
-{"_example": "Fill with {\"file\": \"<path>\", \"reason\": \"<why>\"}. Put spec/research files only — no code paths. Run `python3 .trellis/scripts/get_context.py --mode packages` to list available specs. Delete this line once real entries are added."}
+{"file":".trellis/spec/cli/backend/release-process.md","reason":"阶段9最终集成和发布就绪验收"}
+{"file":".trellis/spec/cli/backend/workflow-state-contract.md","reason":"阶段0-8 task workflow review 状态统一"}
+{"file":".trellis/spec/cli/backend/script-conventions.md","reason":"pack-publish-artifacts 临时目录修复"}

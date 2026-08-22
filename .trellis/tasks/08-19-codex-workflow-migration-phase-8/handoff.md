@@ -2,7 +2,7 @@
 
 ## 状态
 
-阶段 8实现、四道 review gate 和主要验证已完成；已补齐 staged merge-review 报告，下一步创建唯一提交 feat(trellis): complete codex workflow migration phase 8，提交后立即停止，不启动阶段 9。
+阶段 8实现、四道 review gate、主要验证和唯一提交均已完成；阶段 9负责最终集成与发布就绪验收。
 
 ## 已完成
 

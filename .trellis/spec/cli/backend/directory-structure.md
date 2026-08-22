@@ -97,7 +97,7 @@ Files that use generic templates (in `src/templates/`):
 | Template Source | Destination | Reason |
 |----------------|-------------|--------|
 | `src/templates/markdown/spec/**/*.md.txt` | `.trellis/spec/**/*.md` | User fills with project-specific content |
-| `src/templates/markdown/agents.md` | `AGENTS.md` | Project root file |
+| `src/templates/markdown/root-instructions.md` | `AGENTS.md` / `CLAUDE.md` | Shared project root instructions with host-specific wrappers |
 
 ### Build Process
 

@@ -17,7 +17,8 @@
 - Core tarball：trellis-hgl-core-0.6.0-beta.31.tgz，202 entries，122883 bytes。
 - workspace 全量：Core 16 files / 272 passed；CLI 45 passed files、1 skipped file，1300 passed、3 skipped。
 - pnpm typecheck、pnpm build、pnpm lint：通过。
-- Python compile、task.py validate、git diff --check：待文档写回后最后复核。\n- clean-install runtime artifacts：已从 consumer 自有 artifacts 相对路径安装，运行时不依赖源码 checkout 或 matt-skills-main。
+- Python compile、task.py validate、git diff --check：阶段 8提交前已复核通过。
+- clean-install runtime artifacts：已从 consumer 自有 artifacts 相对路径安装，运行时不依赖源码 checkout 或 matt-skills-main。
 
 ## 失败恢复证据
 

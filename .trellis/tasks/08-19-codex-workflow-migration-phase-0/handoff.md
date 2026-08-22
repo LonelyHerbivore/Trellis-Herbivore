@@ -1,7 +1,7 @@
 # 阶段交接记录
 
 - 阶段：0 - 基线与迁移契约
-- 状态：已完成，待父任务需求对齐确认后启动阶段 1
+- 状态：已完成（阶段 9补齐元数据与证据闭环）
 - Trellis task：`.trellis/tasks/08-19-codex-workflow-migration-phase-0`
 - 实际工作目录：`D:\Trellis\Trellis-0.6.0-beta.17`
 - 基础分支：`main`

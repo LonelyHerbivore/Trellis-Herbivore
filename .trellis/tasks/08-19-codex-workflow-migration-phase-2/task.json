@@ -15,13 +15,13 @@
   "branch": "task/codex-workflow-seamless-migration",
   "base_branch": "main",
   "worktree_path": "D:\\Trellis\\Trellis-0.6.0-beta.17",
-  "commit": null,
+  "commit": "4c9602f054073c2dd66be9bb2bfce44cde2eb206",
   "pr_url": null,
   "subtasks": [],
   "children": [],
   "parent": "08-19-codex-workflow-seamless-migration",
   "relatedFiles": [],
-  "notes": "协调会话负责编排和收敛；实施、测试和独立 review 由明确文件边界的执行 agent 完成。",
+  "notes": "阶段9补录当前独立回溯审查；阶段2历史 hash ownership 缺陷已由阶段3修复，原始阶段 review 由协调会话完成。",
   "meta": {
     "host_platform": "codex",
     "execution_mode": "subagent-orchestrated",
@@ -32,6 +32,24 @@
       "code-review": "enabled",
       "code-architecture-review": "enabled",
       "merge-review": "enabled"
+    }
+  }
+,
+  "workflow": {
+    "contract": "explicit-selection-v1",
+    "host": "codex",
+    "execution_mode": "subagent",
+    "worktree_mode": "current-checkout",
+    "development_flow": "default",
+    "review_gates": {
+      "enabled": ["spec-review", "code-review", "code-architecture-review", "merge-review"],
+      "disabled": [],
+      "runs": {
+        "spec-review": { "status": "PASS", "attempts": 1, "report_path": "reports/phase9-retrospective-review.md" },
+        "code-review": { "status": "PASS", "attempts": 1, "report_path": "reports/phase9-retrospective-review.md" },
+        "code-architecture-review": { "status": "PASS", "attempts": 1, "report_path": "reports/phase9-retrospective-review.md" },
+        "merge-review": { "status": "skipped", "attempts": 0, "report_path": null }
+      }
     }
   }
 }

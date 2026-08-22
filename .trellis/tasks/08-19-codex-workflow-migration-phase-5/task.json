@@ -15,7 +15,7 @@
   "branch": "task/codex-workflow-seamless-migration",
   "base_branch": "main",
   "worktree_path": "D:\\Trellis\\Trellis-0.6.0-beta.17",
-  "commit": "feat(trellis): complete codex workflow migration phase 5",
+  "commit": "c8ab931aa08148c069409d96d2f70a885027847d",
   "pr_url": null,
   "subtasks": [],
   "children": [],

@@ -15,7 +15,7 @@
   "branch": "task/codex-workflow-seamless-migration",
   "base_branch": "main",
   "worktree_path": "D:\\Trellis\\Trellis-0.6.0-beta.17",
-  "commit": "feat(trellis): complete codex workflow migration phase 8",
+  "commit": "268b3ff1138d03eb3d9cb78a7f026ed5f127d6bc",
   "pr_url": null,
   "subtasks": [],
   "children": [],
@@ -55,6 +55,23 @@
       "task_validate": "passed",
       "diff_check": "passed",
       "clean_install": "passed; runtime artifacts copied into consumer and installed by relative paths"
+    }
+  },
+  "workflow": {
+    "contract": "explicit-selection-v1",
+    "host": "codex",
+    "execution_mode": "subagent",
+    "worktree_mode": "current-checkout",
+    "development_flow": "default",
+    "review_gates": {
+      "enabled": ["spec-review", "code-review", "code-architecture-review", "merge-review"],
+      "disabled": [],
+      "runs": {
+        "spec-review": { "status": "PASS", "attempts": 1, "report_path": "reports/spec-review.md" },
+        "code-review": { "status": "PASS", "attempts": 1, "report_path": "reports/code-review.md" },
+        "code-architecture-review": { "status": "PASS", "attempts": 1, "report_path": "reports/code-architecture-review.md" },
+        "merge-review": { "status": "PASS", "attempts": 1, "report_path": "reports/merge-review.md" }
+      }
     }
   }
 }

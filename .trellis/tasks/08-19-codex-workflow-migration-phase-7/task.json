@@ -15,7 +15,7 @@
   "branch": "task/codex-workflow-seamless-migration",
   "base_branch": "main",
   "worktree_path": "D:\\Trellis\\Trellis-0.6.0-beta.17",
-  "commit": "feat(trellis): complete codex workflow migration phase 7",
+  "commit": "c47fdb3d3fba36d531f1d9f3e5efcead16a9b196",
   "pr_url": null,
   "subtasks": [],
   "children": [],
@@ -25,7 +25,7 @@
     "packages/cli/test/commands/update.integration.test.ts",
     "packages/cli/test/commands/update-internals.test.ts"
   ],
-  "notes": "阶段7只处理历史项目 update/migration；阶段8 release-preflight、pack 与 clean-install 文件保持未提交。四道 review gate 与最终验证均已通过，待提交后写入 commit hash。",
+  "notes": "阶段7只处理历史项目 update/migration；阶段8 release-preflight、pack 与 clean-install 文件属于后续阶段。四道 review gate 与最终验证均已通过，提交 hash 已由阶段 9补齐。",
   "meta": {
     "host_platform": "codex",
     "execution_mode": "subagent-orchestrated",
@@ -54,6 +54,23 @@
       "python_compile": "passed",
       "task_validate": "passed",
       "diff_check": "passed"
+    }
+  },
+  "workflow": {
+    "contract": "explicit-selection-v1",
+    "host": "codex",
+    "execution_mode": "subagent",
+    "worktree_mode": "current-checkout",
+    "development_flow": "default",
+    "review_gates": {
+      "enabled": ["spec-review", "code-review", "code-architecture-review", "merge-review"],
+      "disabled": [],
+      "runs": {
+        "spec-review": { "status": "PASS", "attempts": 1, "report_path": "reports/spec-review.md" },
+        "code-review": { "status": "PASS", "attempts": 1, "report_path": "reports/code-review.md" },
+        "code-architecture-review": { "status": "PASS", "attempts": 1, "report_path": "reports/code-architecture-review.md" },
+        "merge-review": { "status": "PASS", "attempts": 1, "report_path": "reports/merge-review.md" }
+      }
     }
   }
 }

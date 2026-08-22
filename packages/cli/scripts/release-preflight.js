@@ -40,6 +40,7 @@
  */
 import { execFileSync, execSync } from "node:child_process";
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -327,7 +328,7 @@ function verifyPackedCli() {
 
 function packPublishArtifacts() {
   const v = checkVersions({ requireTag: false, quiet: true });
-  const tmp = fs.mkdtempSync(path.join(REPO_ROOT, ".publish-pack-"));
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "trellis-publish-pack-"));
   const coreDir = path.join(REPO_ROOT, "packages/core");
   const cliDir = path.join(REPO_ROOT, "packages/cli");
   const coreTarball = packWorkspacePackage(coreDir, tmp);

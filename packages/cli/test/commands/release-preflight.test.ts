@@ -192,6 +192,72 @@ describe("release-preflight publish-plan", () => {
   });
 });
 
+describe("release-preflight pack-publish-artifacts", () => {
+  it("keeps publish tarballs outside the repository checkout", () => {
+    const cliPkg = JSON.parse(fs.readFileSync(cliPkgPath, "utf-8")) as {
+      name: string;
+      version: string;
+    };
+    const corePkg = JSON.parse(fs.readFileSync(corePkgPath, "utf-8")) as {
+      name: string;
+      version: string;
+    };
+    const existingPackDirs = fs
+      .readdirSync(repoRoot)
+      .filter((entry) => entry.startsWith(".publish-pack-"));
+    const pnpmBody =
+      process.platform === "win32"
+        ? `@echo off\r\nif not "%1"=="pack" exit /b 1\r\nif not "%2"=="--pack-destination" exit /b 1\r\nnode -e "const fs=require('node:fs'); const path=require('node:path'); const pkg=JSON.parse(fs.readFileSync(path.join(process.cwd(),'package.json'),'utf8')); const output=path.join(process.argv[1], pkg.name+'-'+pkg.version+'.tgz'); fs.writeFileSync(output, ''); process.stdout.write(output+'\\r\\n');" "%3"\r\n`
+        : `#!/bin/sh\nif [ "$1" != "pack" ] || [ "$2" != "--pack-destination" ]; then exit 1; fi\nnode -e "const fs=require('node:fs'); const path=require('node:path'); const pkg=JSON.parse(fs.readFileSync(path.join(process.cwd(),'package.json'),'utf8')); const output=path.join(process.argv[1], pkg.name+'-'+pkg.version+'.tgz'); fs.writeFileSync(output, ''); process.stdout.write(output+'\\n');" "$3"\n`;
+
+    withTempBinScripts(
+      [
+        {
+          name: process.platform === "win32" ? "pnpm.cmd" : "pnpm",
+          body: pnpmBody,
+        },
+      ],
+      (binDir) => {
+        const out = execFileSync(
+          process.execPath,
+          [scriptPath, "pack-publish-artifacts"],
+          {
+            cwd: repoRoot,
+            encoding: "utf-8",
+            env: {
+              ...process.env,
+              PATH: binDir + path.delimiter + (process.env.PATH ?? ""),
+            },
+          },
+        );
+        const result = JSON.parse(out) as {
+          core: { tarball: string };
+          cli: { tarball: string };
+        };
+        expect(path.dirname(result.core.tarball)).not.toBe(repoRoot);
+        expect(path.dirname(result.cli.tarball)).not.toBe(repoRoot);
+        expect(path.basename(result.core.tarball)).toBe(
+          corePkg.name + "-" + corePkg.version + ".tgz",
+        );
+        expect(path.basename(result.cli.tarball)).toBe(
+          cliPkg.name + "-" + cliPkg.version + ".tgz",
+        );
+        expect(fs.existsSync(result.core.tarball)).toBe(true);
+        expect(fs.existsSync(result.cli.tarball)).toBe(true);
+        fs.rmSync(path.dirname(result.core.tarball), {
+          recursive: true,
+          force: true,
+        });
+        expect(
+          fs
+            .readdirSync(repoRoot)
+            .filter((entry) => entry.startsWith(".publish-pack-")),
+        ).toEqual(existingPackDirs);
+      },
+    );
+  });
+});
+
 describe("release-preflight verify-npm", () => {
   it("retries until package version and dist-tag become visible", () => {
     const cliPkg = JSON.parse(fs.readFileSync(cliPkgPath, "utf-8")) as {
@@ -420,6 +486,7 @@ describe("release tarball clean-install", () => {
       const consumerRoot = fs.mkdtempSync(
         path.join(os.tmpdir(), "trellis-clean-consumer-"),
       );
+      const globalPrefix = path.join(consumerRoot, "global-prefix");
       const runBinary = (cwd: string, args: string[]): string =>
         execFileSync(
           process.execPath,
@@ -439,6 +506,20 @@ describe("release tarball clean-install", () => {
             env: consumerEnv,
           },
         );
+      const runGlobalBinary = (cwd: string, args: string[]): string => {
+        const entry = path.join(
+          globalPrefix,
+          "node_modules",
+          cliPackage.name,
+          "bin",
+          "trellis.js",
+        );
+        return execFileSync(process.execPath, [entry, ...args], {
+          cwd,
+          encoding: "utf-8",
+          env: consumerEnv,
+        });
+      };
 
       try {
         runPackageManager(["build"], repoRoot);
@@ -491,6 +572,40 @@ describe("release tarball clean-install", () => {
         fs.copyFileSync(cliTarball, runtimeCliTarball);
         expect(runtimeCoreTarball).not.toContain(repoRoot);
         expect(runtimeCliTarball).not.toContain(repoRoot);
+        runNpm(
+          [
+            "install",
+            "--global",
+            "--prefix",
+            globalPrefix,
+            "--no-audit",
+            "--no-fund",
+            runtimeCoreTarball,
+            runtimeCliTarball,
+          ],
+          consumerRoot,
+        );
+        const globalCliRoot = path.join(
+          globalPrefix,
+          "node_modules",
+          cliPackage.name,
+        );
+        const globalCliEntry = path.join(globalCliRoot, "bin", "trellis.js");
+        expect(fs.existsSync(globalCliEntry)).toBe(true);
+        assertNoConsumerDevelopmentPaths(globalCliRoot);
+        const globalClaude = path.join(consumerRoot, "global-claude");
+        const globalCodex = path.join(consumerRoot, "global-codex");
+        fs.mkdirSync(globalClaude, { recursive: true });
+        fs.mkdirSync(globalCodex, { recursive: true });
+        runGlobalBinary(globalClaude, ["init", "--claude", "--yes"]);
+        runGlobalBinary(globalCodex, ["init", "--codex", "--yes"]);
+        runGlobalBinary(globalClaude, ["update", "--migrate", "--force"]);
+        expect(fs.existsSync(path.join(globalClaude, "CLAUDE.md"))).toBe(true);
+        expect(fs.existsSync(path.join(globalClaude, "AGENTS.md"))).toBe(true);
+        expect(fs.existsSync(path.join(globalClaude, ".trellis", "workflow.md"))).toBe(
+          true,
+        );
+        expect(fs.existsSync(path.join(globalCodex, "AGENTS.md"))).toBe(true);
         runNpm(
           [
             "install",
