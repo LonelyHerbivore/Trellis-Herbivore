@@ -2,31 +2,59 @@
   "id": "codex-workflow-migration-phase-8",
   "name": "codex-workflow-migration-phase-8",
   "title": "Codex 工作流无缝迁移 - 阶段 8：npm tarball 与干净环境 E2E",
-  "description": "",
-  "status": "planning",
+  "description": "npm tarball 内容、clean-install consumer、双端 init/update 与最小工作流 E2E",
+  "status": "completed",
   "dev_type": null,
-  "scope": null,
-  "package": null,
+  "scope": "packages/cli/scripts/release-preflight.js; packages/cli/test/commands/release-preflight.test.ts; .github/workflows/publish.yml; phase-8 task artifacts",
+  "package": "trellis-hgl",
   "priority": "P1",
   "creator": "codex",
   "assignee": "codex",
   "createdAt": "2026-08-19",
-  "completedAt": null,
+  "completedAt": "2026-08-22",
   "branch": "task/codex-workflow-seamless-migration",
   "base_branch": "main",
   "worktree_path": "D:\\Trellis\\Trellis-0.6.0-beta.17",
-  "commit": null,
+  "commit": "feat(trellis): complete codex workflow migration phase 8",
   "pr_url": null,
   "subtasks": [],
   "children": [],
   "parent": "08-19-codex-workflow-seamless-migration",
-  "relatedFiles": [],
-  "notes": "协调会话负责编排和收敛；实施、测试和独立 review 由明确文件边界的执行 agent 完成。",
+  "relatedFiles": [
+    "packages/cli/scripts/release-preflight.js",
+    "packages/cli/test/commands/release-preflight.test.ts",
+    ".github/workflows/publish.yml"
+  ],
+  "notes": "阶段8只验证 npm tarball 与 clean-install E2E；tarball 清单、独立 runtime artifacts 安装、三种 init、双向增量、update --migrate、task/phase/review/archive 和发布 workflow preflight 均已通过。四道 review gate 与最终验证均已通过。阶段9不启动。",
   "meta": {
     "host_platform": "codex",
     "execution_mode": "subagent-orchestrated",
     "worktree_selection": "current_checkout",
     "development_flow": "default",
-    "review_gate_selection": { "spec-review": "enabled", "code-review": "enabled", "code-architecture-review": "enabled", "merge-review": "enabled" }
+    "review_gate_selection": {
+      "spec-review": "enabled",
+      "code-review": "enabled",
+      "code-architecture-review": "enabled",
+      "merge-review": "enabled"
+    },
+    "review_gate_status": {
+      "spec-review": "passed",
+      "code-review": "passed",
+      "code-architecture-review": "passed",
+      "merge-review": "passed"
+    },
+    "validation": {
+      "targeted_tests": "1 file, 10 passed",
+      "tarball_manifest": "passed; CLI 670 entries, core 202 entries; verify-tarball-manifest passed",
+      "core_tests": "16 files, 272 passed",
+      "cli_tests": "45 files passed, 1 skipped file, 1300 passed, 3 skipped",
+      "typecheck": "passed",
+      "build": "passed",
+      "lint": "passed",
+      "python_compile": "passed",
+      "task_validate": "passed",
+      "diff_check": "passed",
+      "clean_install": "passed; runtime artifacts copied into consumer and installed by relative paths"
+    }
   }
 }

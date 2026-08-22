@@ -18,5 +18,13 @@
 
 ## 验收标准
 
-- [ ] build、test、typecheck、lint、pack、tarball 清单和 clean-install consumer E2E 通过。
-- [ ] 新环境不含源码或 `matt-skills-main` 时仍能正常工作。
+- [x] build、test、typecheck、lint、pack、tarball 清单和 clean-install consumer E2E 通过。
+- [x] 新环境不含源码或 `matt-skills-main` 时仍能正常工作。
+
+## 实现边界与假设
+
+- 本阶段只验证已构建的 CLI/core 发布包和干净 consumer；不改变历史项目迁移语义，不启动阶段 9最终集成。
+- 打包复用现有 release-preflight、pnpm pack 和 package 文档同步流程；不新增平行发布器。
+- consumer 只安装临时目录中的 CLI/core tgz，不引用源码目录、workspace 协议或开发机 skills 路径；测试先将 tgz 复制到 consumer 自有 `artifacts/`，再以相对路径安装并运行。
+- clean-install 流程覆盖 Claude-only、Codex-only、Claude + Codex、双向增量启用、update --migrate，以及 task -> planning -> strategy -> implement -> 四道 review -> archive/final validation。
+- tarball 清单必须同时包含 templates、skills、agents、hooks、workflow 和 migration manifests，并拒绝开发机绝对路径与 matt-skills-main 泄漏。

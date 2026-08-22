@@ -72,6 +72,9 @@ jobs:
           printf 'core_tarball=%s\n' "$core_tarball" >> "$GITHUB_OUTPUT"
           printf 'cli_tarball=%s\n' "$cli_tarball" >> "$GITHUB_OUTPUT"
 
+      - name: Verify tarball manifest and development-path hygiene
+        run: node packages/cli/scripts/release-preflight.js verify-tarball-manifest
+
       - name: Publish trellis-hgl-core
         if: steps.plan.outputs.core_publish == 'true'
         run: npm publish "${{ steps.artifacts.outputs.core_tarball }}" --access public --tag ${{ steps.plan.outputs.tag }}

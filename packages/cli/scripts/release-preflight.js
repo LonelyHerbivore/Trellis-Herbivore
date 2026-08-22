@@ -38,7 +38,7 @@
  * version/tag mismatch. Version equality is checked first; npm existence
  * decides per-package skip.
  */
-import { execSync } from "node:child_process";
+import { execFileSync, execSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -73,7 +73,9 @@ function tagVersionFromEnv() {
   // GITHUB_REF for `push: tags: v*` looks like `refs/tags/v0.6.0-beta.12`.
   // GITHUB_REF_NAME on `release.published` is the tag name.
   const ref = process.env.GITHUB_REF_NAME || process.env.GITHUB_REF || "";
-  const m = ref.match(/(?:refs\/tags\/)?v(\d+\.\d+\.\d+(?:-[A-Za-z0-9.+-]+)?)$/);
+  const m = ref.match(
+    /(?:refs\/tags\/)?v(\d+\.\d+\.\d+(?:-[A-Za-z0-9.+-]+)?)$/,
+  );
   return m ? m[1] : null;
 }
 
@@ -258,16 +260,22 @@ function withSyncedPackageDocs(packageDir, callback) {
 
 function packWorkspacePackage(packageDir, destinationDir) {
   return withSyncedPackageDocs(packageDir, () => {
-    const out = execSync(`pnpm pack --pack-destination ${destinationDir}`, {
-      cwd: packageDir,
-      encoding: "utf-8",
-      stdio: ["pipe", "pipe", "pipe"],
-    });
+    const out = execSync(
+      'pnpm pack --pack-destination "' + destinationDir + '"',
+      {
+        cwd: packageDir,
+        encoding: "utf-8",
+        stdio: ["pipe", "pipe", "pipe"],
+      },
+    );
     const last = out.trim().split("\n").filter(Boolean).pop() || "";
     let packed = path.isAbsolute(last) ? last : path.join(destinationDir, last);
     if (!fs.existsSync(packed)) {
-      const tgz = fs.readdirSync(destinationDir).find((f) => f.endsWith(".tgz"));
-      if (!tgz) fail(`pnpm pack did not produce a tarball in ${destinationDir}`);
+      const tgz = fs
+        .readdirSync(destinationDir)
+        .find((f) => f.endsWith(".tgz"));
+      if (!tgz)
+        fail(`pnpm pack did not produce a tarball in ${destinationDir}`);
       packed = path.join(destinationDir, tgz);
     }
     return packed;
@@ -283,10 +291,13 @@ function packedCliCoreDependency() {
     packed = packWorkspacePackage(path.join(REPO_ROOT, "packages/cli"), tmp);
     const extractDir = path.join(tmp, extractDirName);
     fs.mkdirSync(extractDir);
-    execSync(`tar -xzf ${path.basename(packed)} -C ${extractDirName} package/package.json`, {
-      cwd: tmp,
-      stdio: ["pipe", "pipe", "pipe"],
-    });
+    execSync(
+      `tar -xzf ${path.basename(packed)} -C ${extractDirName} package/package.json`,
+      {
+        cwd: tmp,
+        stdio: ["pipe", "pipe", "pipe"],
+      },
+    );
     const packedPkg = readJSON(path.join(extractDir, "package/package.json"));
     return {
       coreName: v.coreName,
@@ -334,20 +345,141 @@ function packPublishArtifacts() {
   );
 }
 
+function listTarEntries(tarball) {
+  return execFileSync("tar", ["-tzf", path.basename(tarball)], {
+    cwd: path.dirname(tarball),
+    encoding: "utf-8",
+    stdio: ["pipe", "pipe", "pipe"],
+  })
+    .split(/\r?\n/)
+    .map((entry) => entry.trim())
+    .filter(Boolean);
+}
+
+function extractTarball(tarball, destination) {
+  fs.mkdirSync(destination, { recursive: true });
+  execFileSync("tar", ["-xzf", path.basename(tarball), "-C", destination], {
+    cwd: path.dirname(tarball),
+    stdio: ["pipe", "pipe", "pipe"],
+  });
+}
+
+function assertNoDevelopmentPath(value, location) {
+  const normalized = value.replaceAll("\\", "/").toLowerCase();
+  const forbidden = ["matt-skills-main", "d:/trellis", "c:/users/asus"];
+  for (const token of forbidden) {
+    if (normalized.includes(token)) {
+      fail(
+        "tarball contains development-machine path token " +
+          token +
+          " in " +
+          location,
+      );
+    }
+  }
+}
+
+function assertNoDevelopmentPaths(root) {
+  const stack = [root];
+  while (stack.length > 0) {
+    const current = stack.pop();
+    if (!current) continue;
+    for (const entry of fs.readdirSync(current, { withFileTypes: true })) {
+      const fullPath = path.join(current, entry.name);
+      if (entry.isDirectory()) {
+        stack.push(fullPath);
+        continue;
+      }
+      if (!entry.isFile()) continue;
+      assertNoDevelopmentPath(
+        fs.readFileSync(fullPath, "utf-8"),
+        "extracted file content",
+      );
+    }
+  }
+}
+
+function verifyTarballManifestFor(tarball, packageKind) {
+  const entries = listTarEntries(tarball);
+  for (const entry of entries) assertNoDevelopmentPath(entry, "tar entry");
+  const has = (prefix) => entries.some((entry) => entry.startsWith(prefix));
+  if (!has("package/package.json"))
+    fail("tarball is missing package/package.json: " + tarball);
+  if (packageKind === "cli") {
+    const requiredPrefixes = [
+      "package/bin/trellis.js",
+      "package/dist/templates/claude/agents/",
+      "package/dist/templates/codex/agents/",
+      "package/dist/templates/codex/hooks/",
+      "package/dist/templates/common/skills/",
+      "package/dist/templates/common/bundled-skills/",
+      "package/dist/templates/shared-hooks/",
+      "package/dist/templates/trellis/",
+      "package/dist/templates/trellis/workflow.md",
+      "package/dist/migrations/manifests/",
+    ];
+    for (const prefix of requiredPrefixes) {
+      if (!has(prefix)) fail("CLI tarball is missing " + prefix);
+    }
+  } else if (!has("package/dist/")) {
+    fail("core tarball is missing package/dist/: " + tarball);
+  }
+
+  const tmp = fs.mkdtempSync(path.join(REPO_ROOT, ".tarball-verify-"));
+  try {
+    extractTarball(tarball, tmp);
+    assertNoDevelopmentPaths(tmp);
+  } finally {
+    fs.rmSync(tmp, { recursive: true, force: true });
+  }
+}
+
+function verifyTarballManifest() {
+  const v = checkVersions({ requireTag: false, quiet: true });
+  const tmp = fs.mkdtempSync(path.join(REPO_ROOT, ".tarball-pack-"));
+  try {
+    const coreTarball = packWorkspacePackage(
+      path.join(REPO_ROOT, "packages/core"),
+      tmp,
+    );
+    const cliTarball = packWorkspacePackage(
+      path.join(REPO_ROOT, "packages/cli"),
+      tmp,
+    );
+    verifyTarballManifestFor(coreTarball, "core");
+    verifyTarballManifestFor(cliTarball, "cli");
+    console.log(
+      GREEN +
+        "ok" +
+        RESET +
+        " tarballs contain runtime assets for " +
+        v.cliVersion +
+        ".",
+    );
+  } finally {
+    fs.rmSync(tmp, { recursive: true, force: true });
+  }
+}
+
 async function verifyPublishedCliManifest() {
   const v = checkVersions({ requireTag: false });
   let dep;
   try {
-    dep = await retry(`published CLI metadata for ${v.cliName}@${v.cliVersion}`, () => {
-      const dependencies = npmViewJSON(`${v.cliName}@${v.cliVersion} dependencies`);
-      const dependency = dependencies?.[v.coreName] ?? null;
-      if (!dependency) {
-        throw new Error(
-          `published CLI metadata for ${v.cliName}@${v.cliVersion} is missing dependency on ${v.coreName}.`,
+    dep = await retry(
+      `published CLI metadata for ${v.cliName}@${v.cliVersion}`,
+      () => {
+        const dependencies = npmViewJSON(
+          `${v.cliName}@${v.cliVersion} dependencies`,
         );
-      }
-      return dependency;
-    });
+        const dependency = dependencies?.[v.coreName] ?? null;
+        if (!dependency) {
+          throw new Error(
+            `published CLI metadata for ${v.cliName}@${v.cliVersion} is missing dependency on ${v.coreName}.`,
+          );
+        }
+        return dependency;
+      },
+    );
   } catch {
     fail(
       `published CLI metadata for ${v.cliName}@${v.cliVersion} is missing dependency on ${v.coreName}.`,
@@ -408,6 +540,7 @@ async function main() {
         `  publish-plan [--json|--github]\n` +
         `  pack-publish-artifacts\n` +
         `  verify-packed-cli\n` +
+        `  verify-tarball-manifest\n` +
         `  verify-published-cli-manifest\n` +
         `  verify-npm [--package all|core|cli]\n`,
     );
@@ -437,6 +570,10 @@ async function main() {
   }
   if (cmd === "verify-packed-cli") {
     verifyPackedCli();
+    return;
+  }
+  if (cmd === "verify-tarball-manifest") {
+    verifyTarballManifest();
     return;
   }
   if (cmd === "verify-published-cli-manifest") {
