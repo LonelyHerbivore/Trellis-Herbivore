@@ -487,6 +487,11 @@ describe("release tarball clean-install", () => {
         path.join(os.tmpdir(), "trellis-clean-consumer-"),
       );
       const globalPrefix = path.join(consumerRoot, "global-prefix");
+      const globalNodeModules =
+        process.platform === "win32"
+          ? path.join(globalPrefix, "node_modules")
+          : path.join(globalPrefix, "lib", "node_modules");
+      const globalCliRoot = path.join(globalNodeModules, cliPackage.name);
       const runBinary = (cwd: string, args: string[]): string =>
         execFileSync(
           process.execPath,
@@ -507,13 +512,7 @@ describe("release tarball clean-install", () => {
           },
         );
       const runGlobalBinary = (cwd: string, args: string[]): string => {
-        const entry = path.join(
-          globalPrefix,
-          "node_modules",
-          cliPackage.name,
-          "bin",
-          "trellis.js",
-        );
+        const entry = path.join(globalCliRoot, "bin", "trellis.js");
         return execFileSync(process.execPath, [entry, ...args], {
           cwd,
           encoding: "utf-8",
@@ -585,11 +584,6 @@ describe("release tarball clean-install", () => {
           ],
           consumerRoot,
         );
-        const globalNodeModules =
-          process.platform === "win32"
-            ? path.join(globalPrefix, "node_modules")
-            : path.join(globalPrefix, "lib", "node_modules");
-        const globalCliRoot = path.join(globalNodeModules, cliPackage.name);
         const globalCliEntry = path.join(globalCliRoot, "bin", "trellis.js");
         expect(fs.existsSync(globalCliEntry)).toBe(true);
         assertNoConsumerDevelopmentPaths(globalCliRoot);
