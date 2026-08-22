@@ -19,15 +19,25 @@
   "pr_url": null,
   "subtasks": [],
   "children": [],
-  "parent": "08-19-codex-workflow-seamless-migration",
-  "relatedFiles": ["packages/cli/scripts/release-preflight.js", "packages/cli/test/commands/release-preflight.test.ts", ".trellis/tasks/08-19-codex-workflow-migration-phase-9/release-draft.md", ".trellis/tasks/08-19-codex-workflow-migration-phase-9/reports/" ],
+  "parent": null,
+  "relatedFiles": [
+    "packages/cli/scripts/release-preflight.js",
+    "packages/cli/test/commands/release-preflight.test.ts",
+    ".trellis/tasks/08-19-codex-workflow-migration-phase-9/release-draft.md",
+    ".trellis/tasks/08-19-codex-workflow-migration-phase-9/reports/"
+  ],
   "notes": "阶段 9已完成最终集成、四道 review gate、质量门禁和发布就绪验收；未启动阶段 10。",
   "meta": {
     "host_platform": "codex",
     "execution_mode": "subagent-orchestrated",
     "worktree_selection": "current_checkout",
     "development_flow": "default",
-    "review_gate_selection": { "spec-review": "enabled", "code-review": "enabled", "code-architecture-review": "enabled", "merge-review": "enabled" }
+    "review_gate_selection": {
+      "spec-review": "enabled",
+      "code-review": "enabled",
+      "code-architecture-review": "enabled",
+      "merge-review": "enabled"
+    }
   },
   "workflow": {
     "contract": "explicit-selection-v1",
@@ -36,13 +46,34 @@
     "worktree_mode": "current-checkout",
     "development_flow": "default",
     "review_gates": {
-      "enabled": ["spec-review", "code-review", "code-architecture-review", "merge-review"],
+      "enabled": [
+        "spec-review",
+        "code-review",
+        "code-architecture-review",
+        "merge-review"
+      ],
       "disabled": [],
       "runs": {
-        "spec-review": { "status": "PASS", "attempts": 1, "report_path": "reports/spec-review.md" },
-        "code-review": { "status": "PASS", "attempts": 1, "report_path": "reports/code-review.md" },
-        "code-architecture-review": { "status": "PASS", "attempts": 1, "report_path": "reports/code-architecture-review.md" },
-        "merge-review": { "status": "PASS", "attempts": 1, "report_path": "reports/merge-review.md" }
+        "spec-review": {
+          "status": "PASS",
+          "attempts": 1,
+          "report_path": "reports/spec-review.md"
+        },
+        "code-review": {
+          "status": "PASS",
+          "attempts": 1,
+          "report_path": "reports/code-review.md"
+        },
+        "code-architecture-review": {
+          "status": "PASS",
+          "attempts": 1,
+          "report_path": "reports/code-architecture-review.md"
+        },
+        "merge-review": {
+          "status": "PASS",
+          "attempts": 1,
+          "report_path": "reports/merge-review.md"
+        }
       }
     }
   }

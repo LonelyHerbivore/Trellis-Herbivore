@@ -1,6 +1,6 @@
 # 阶段 9 发布草稿
 
-> 状态：仅供发布前审阅。目标版本为 `0.6.0-beta.32`，当前源码包版本仍为 `0.6.0-beta.31`。本草稿基于真实差异 `v0.6.0-beta.31..HEAD` 生成，不代表已经创建 tag、推送或发布。
+> 状态：已完成发布归档记录。版本为 `0.6.0-beta.32`，本记录基于真实差异 `v0.6.0-beta.31..HEAD` 生成；GitHub tag、GitHub Release 和 npm 发布均已完成。
 
 ## GitHub Release 中文标题
 
@@ -44,14 +44,13 @@
 - release-preflight 定向测试：11 项通过。
 - `verify-packed-cli`、`verify-tarball-manifest`、`pack-publish-artifacts`、Python `compileall`、阶段 9 `task.py validate`、`git diff --check`：通过。
 - clean-install consumer E2E：通过。
-- `verify-npm --package all`：只读确认当前 `0.6.0-beta.31` 在 npm `latest` 可见。
+- `verify-npm --package all`：只读确认 `0.6.0-beta.32` 的 CLI/Core 均在 npm `latest` 可见。
 
 ### 已知限制与未完成事项
 
-- 当前 CLI/Core 版本仍为 `0.6.0-beta.31`，且现有 `v0.6.0-beta.31` tag 指向旧提交 `ac7126a`；正式发布前必须将两包同步 bump 到 `0.6.0-beta.32` 并创建匹配 tag。
-- 本次主机验证为 Windows，Linux CI 矩阵仍需由 GitHub Actions 执行。
-- 全局安装验收已在隔离 prefix 中执行 `npm install -g` 语义测试；未写入用户系统级全局 npm 目录，真实系统级安装仍建议由发布窗口或 CI 环境执行。
-- GitHub push、tag、GitHub Release 和 npm publish 均尚未执行，官方 npm 发布仍由 `.github/workflows/publish.yml` 负责。
+- 本地全局安装验收使用隔离 prefix 执行 `npm install -g` 语义测试，未写入用户系统级全局 npm 目录；真实系统级安装仍由用户环境决定。
+- 本地完整验证主机为 Windows；GitHub Actions 的 Ubuntu 发布运行已通过。
+- 本父任务没有遗留发布阻塞或未完成交付；阶段 10 未启动。
 
 ### 破坏性变更
 
@@ -59,14 +58,14 @@
 
 ## npm 中文发布摘要
 
-`trellis-hgl` 与 `trellis-hgl-core` 计划同步发布 `0.6.0-beta.32`。本版本完成 Claude Code + Codex 双端工作流迁移，加入 Codex 入口/hooks/review agent、共享 task/workflow/review 状态、唯一 worktree 记录、历史项目 update/migration、tarball 自包含检查和 clean-install E2E。CLI 打包后将 Core 依赖锁定为同版本；发布流程仍要求通过 GitHub Actions 同步发布两个包并验证 `latest`。
+`trellis-hgl` 与 `trellis-hgl-core` 已同步发布 `0.6.0-beta.32`。本版本完成 Claude Code + Codex 双端工作流迁移，加入 Codex 入口/hooks/review agent、共享 task/workflow/review 状态、唯一 worktree 记录、历史项目 update/migration、tarball 自包含检查和 clean-install E2E。CLI 打包后将 Core 依赖锁定为同版本；GitHub Actions 已完成两个包的发布并验证 `latest`。
 
-## 待执行的 GitHub / npm 命令清单
+## 已执行的 GitHub / npm 命令记录
 
-以下命令仅在收到用户明确确认“确认发布 GitHub 和 npm”后执行；本阶段不执行任何一条远端变更命令：
+以下命令和等价的 GitHub Actions 流程已在用户确认后执行；本节保留发布过程和发布后核验记录：
 
 ```bash
-# 1. 在发布窗口内同步两包版本（当前 beta.31 -> beta.32）
+# 1. 发布窗口内已同步两包版本（beta.31 -> beta.32）
 node packages/cli/scripts/bump-versions.js beta
 node packages/cli/scripts/release-preflight.js check-versions
 
@@ -79,18 +78,18 @@ node packages/cli/scripts/release-preflight.js verify-packed-cli
 node packages/cli/scripts/release-preflight.js pack-publish-artifacts
 node packages/cli/scripts/release-preflight.js verify-tarball-manifest
 
-# 3. 提交已 bump 的两包版本并创建匹配 tag
+# 3. 已提交 bump 后的两包版本并创建匹配 tag
 git add packages/cli/package.json packages/core/package.json
 git commit -m "0.6.0-beta.32"
 git tag v0.6.0-beta.32
 
-# 4. 推送 beta 分支和 tag，触发 .github/workflows/publish.yml
+# 4. 已推送 main 和 tag，触发 .github/workflows/publish.yml
 git push origin HEAD --tags
 
-# 5. 可选：创建 GitHub Release（正文使用本文件上方草稿）
+# 5. 已创建 GitHub Release（正文使用本文件上方草稿）
 gh release create v0.6.0-beta.32 --title "Trellis 0.6.0-beta.32：Claude Code 与 Codex 双端工作流无缝迁移" --notes-file .trellis/tasks/08-19-codex-workflow-migration-phase-9/release-draft.md
 
-# 6. 发布后只读核验；官方 npm publish 由 GitHub Actions 执行
+# 6. 已执行发布后只读核验；官方 npm publish 由 GitHub Actions 执行
 node packages/cli/scripts/release-preflight.js verify-published-cli-manifest
 node packages/cli/scripts/release-preflight.js verify-npm --package all
 npm view trellis-hgl@0.6.0-beta.32 version dist-tags --json --registry=https://registry.npmjs.org/

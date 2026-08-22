@@ -19,7 +19,7 @@
   "pr_url": null,
   "subtasks": [],
   "children": [],
-  "parent": "08-19-codex-workflow-seamless-migration",
+  "parent": null,
   "relatedFiles": [],
   "notes": "阶段9补录当前独立回溯审查；阶段2历史 hash ownership 缺陷已由阶段3修复，原始阶段 review 由协调会话完成。",
   "meta": {
@@ -33,8 +33,7 @@
       "code-architecture-review": "enabled",
       "merge-review": "enabled"
     }
-  }
-,
+  },
   "workflow": {
     "contract": "explicit-selection-v1",
     "host": "codex",
@@ -42,13 +41,34 @@
     "worktree_mode": "current-checkout",
     "development_flow": "default",
     "review_gates": {
-      "enabled": ["spec-review", "code-review", "code-architecture-review", "merge-review"],
+      "enabled": [
+        "spec-review",
+        "code-review",
+        "code-architecture-review",
+        "merge-review"
+      ],
       "disabled": [],
       "runs": {
-        "spec-review": { "status": "PASS", "attempts": 1, "report_path": "reports/phase9-retrospective-review.md" },
-        "code-review": { "status": "PASS", "attempts": 1, "report_path": "reports/phase9-retrospective-review.md" },
-        "code-architecture-review": { "status": "PASS", "attempts": 1, "report_path": "reports/phase9-retrospective-review.md" },
-        "merge-review": { "status": "skipped", "attempts": 0, "report_path": null }
+        "spec-review": {
+          "status": "PASS",
+          "attempts": 1,
+          "report_path": "reports/phase9-retrospective-review.md"
+        },
+        "code-review": {
+          "status": "PASS",
+          "attempts": 1,
+          "report_path": "reports/phase9-retrospective-review.md"
+        },
+        "code-architecture-review": {
+          "status": "PASS",
+          "attempts": 1,
+          "report_path": "reports/phase9-retrospective-review.md"
+        },
+        "merge-review": {
+          "status": "skipped",
+          "attempts": 0,
+          "report_path": null
+        }
       }
     }
   }

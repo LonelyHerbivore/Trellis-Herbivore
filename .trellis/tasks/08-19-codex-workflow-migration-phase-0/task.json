@@ -19,7 +19,7 @@
   "pr_url": null,
   "subtasks": [],
   "children": [],
-  "parent": "08-19-codex-workflow-seamless-migration",
+  "parent": null,
   "relatedFiles": [],
   "notes": "阶段 0 只建立事实基线与迁移契约，不修改产品行为。协调会话负责编排和收敛，探查与基线核验由独立 agent 完成。",
   "meta": {

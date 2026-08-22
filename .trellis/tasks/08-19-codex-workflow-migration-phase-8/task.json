@@ -19,7 +19,7 @@
   "pr_url": null,
   "subtasks": [],
   "children": [],
-  "parent": "08-19-codex-workflow-seamless-migration",
+  "parent": null,
   "relatedFiles": [
     "packages/cli/scripts/release-preflight.js",
     "packages/cli/test/commands/release-preflight.test.ts",
@@ -64,13 +64,34 @@
     "worktree_mode": "current-checkout",
     "development_flow": "default",
     "review_gates": {
-      "enabled": ["spec-review", "code-review", "code-architecture-review", "merge-review"],
+      "enabled": [
+        "spec-review",
+        "code-review",
+        "code-architecture-review",
+        "merge-review"
+      ],
       "disabled": [],
       "runs": {
-        "spec-review": { "status": "PASS", "attempts": 1, "report_path": "reports/spec-review.md" },
-        "code-review": { "status": "PASS", "attempts": 1, "report_path": "reports/code-review.md" },
-        "code-architecture-review": { "status": "PASS", "attempts": 1, "report_path": "reports/code-architecture-review.md" },
-        "merge-review": { "status": "PASS", "attempts": 1, "report_path": "reports/merge-review.md" }
+        "spec-review": {
+          "status": "PASS",
+          "attempts": 1,
+          "report_path": "reports/spec-review.md"
+        },
+        "code-review": {
+          "status": "PASS",
+          "attempts": 1,
+          "report_path": "reports/code-review.md"
+        },
+        "code-architecture-review": {
+          "status": "PASS",
+          "attempts": 1,
+          "report_path": "reports/code-architecture-review.md"
+        },
+        "merge-review": {
+          "status": "PASS",
+          "attempts": 1,
+          "report_path": "reports/merge-review.md"
+        }
       }
     }
   }
