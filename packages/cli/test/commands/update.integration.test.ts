@@ -42,6 +42,7 @@ import { computeHash } from "../../src/utils/template-hash.js";
 import { workflowMdTemplate } from "../../src/templates/trellis/index.js";
 import { replacePythonCommandLiterals } from "../../src/configurators/shared.js";
 import { ensureCodexRequestUserInput } from "../../src/utils/codex-user-config.js";
+import { runWorkflowCommand } from "../../src/commands/workflow.js";
 
 // A managed template file that update always handles (Python script)
 const MANAGED_FILE = `${PATHS.SCRIPTS}/get_context.py`;
@@ -50,11 +51,11 @@ const CLAUDE_CODE_REVIEW_AGENT = ".claude/agents/trellis-code-review.md";
 const CLAUDE_SUBAGENT_HOOK = ".claude/hooks/inject-subagent-context.py";
 
 /** Remove a key from a hash object (avoids eslint no-dynamic-delete) */
-function removeHashEntry(
-  obj: Record<string, unknown>,
+function removeHashEntry<T>(
+  obj: Record<string, T>,
   key: string,
-): Record<string, unknown> {
-  return Object.fromEntries(Object.entries(obj).filter(([k]) => k !== key));
+): Record<string, T> {
+  return Object.fromEntries(Object.entries(obj).filter(([k]) => k !== key)) as Record<string, T>;
 }
 
 /**
@@ -162,9 +163,33 @@ describe("update() integration", () => {
     // Mock fetch for npm registry
     vi.stubGlobal(
       "fetch",
-      vi.fn().mockResolvedValue({
-        ok: true,
-        json: () => Promise.resolve({ version: VERSION }),
+      vi.fn(async (input: string | URL) => {
+        const url = String(input);
+        if (url.endsWith("/index.json")) {
+          return new Response(
+            JSON.stringify({
+              version: 1,
+              templates: [
+                {
+                  id: "tdd",
+                  type: "workflow",
+                  name: "TDD Workflow",
+                  path: "workflows/tdd/workflow.md",
+                },
+              ],
+            }),
+            { status: 200 },
+          );
+        }
+        if (url.endsWith("workflows/tdd/workflow.md")) {
+          return new Response("# TDD Workflow\\n\\nred -> green -> refactor\\n", {
+            status: 200,
+          });
+        }
+        return {
+          ok: true,
+          json: () => Promise.resolve({ version: VERSION }),
+        };
       }),
     );
   });
@@ -686,12 +711,17 @@ describe("update() integration", () => {
       ),
     );
     writeHashesV2(hashFilePath(), legacyHashes);
+    fs.writeFileSync(versionFilePath(), "0.4.0-beta.8");
     vi.mocked(ensureCodexRequestUserInput).mockClear();
 
     await update({ force: true });
 
     expect(
       fs.existsSync(projectFile(".codex/agents/trellis-check.toml")),
+    ).toBe(true);
+    expect(fs.existsSync(projectFile(".codex/hooks.json"))).toBe(true);
+    expect(
+      fs.existsSync(projectFile(".codex/agents/trellis-code-review.toml")),
     ).toBe(true);
     expect(ensureCodexRequestUserInput).toHaveBeenCalledOnce();
   });
@@ -1419,5 +1449,382 @@ describe("update() integration", () => {
     expect(readHashesV2(hashFile)[PATHS.WORKFLOW_GUIDE_FILE]).toBe(
       computeHash(updated),
     );
+  });
+
+  it("#phase7 version-jump fixture migrates legacy skills and agents while adding review agents", async () => {
+    await init({ yes: true, force: true, claude: true, codex: true });
+
+    const sharedSkillNames = [
+      ["before-dev", "trellis-before-dev"],
+      ["brainstorm", "trellis-brainstorm"],
+      ["break-loop", "trellis-break-loop"],
+      ["check", "trellis-check"],
+      ["update-spec", "trellis-update-spec"],
+      ["finish-work", "trellis-finish-work"],
+    ] as const;
+    let hashes = readHashesV2(hashFilePath());
+    for (const [legacyName, currentName] of sharedSkillNames) {
+      const currentPath = ".agents/skills/" + currentName + "/SKILL.md";
+      const legacyPath = ".agents/skills/" + legacyName + "/SKILL.md";
+      const content = readProjectFile(currentPath);
+      writeProjectFile(legacyPath, content);
+      fs.rmSync(projectFile(".agents/skills/" + currentName), {
+        recursive: true,
+        force: true,
+      });
+      hashes[legacyPath] = computeHash(content);
+      hashes = removeHashEntry(hashes, currentPath);
+    }
+
+    for (const agentName of ["implement", "check", "research"]) {
+      const currentPath = ".codex/agents/trellis-" + agentName + ".toml";
+      const legacyPath = ".codex/agents/" + agentName + ".toml";
+      const content = readProjectFile(currentPath);
+      writeProjectFile(legacyPath, content);
+      fs.rmSync(projectFile(currentPath), { force: true });
+      hashes[legacyPath] = computeHash(content);
+      hashes = removeHashEntry(hashes, currentPath);
+    }
+
+    const customAgents = "# local agent notes\n";
+    writeProjectFile(".codex/agents/local.toml", customAgents);
+    const customEntry = "\n\n# User-owned entry\n";
+    writeProjectFile("AGENTS.md", readProjectFile("AGENTS.md") + customEntry);
+    writeProjectFile(".trellis/.version", "0.4.0-beta.8");
+    writeHashesV2(hashFilePath(), hashes);
+
+    await update({ migrate: true, force: true });
+
+    for (const [, currentName] of sharedSkillNames) {
+      expect(fs.existsSync(projectFile(".agents/skills/" + currentName + "/SKILL.md"))).toBe(true);
+    }
+    for (const agentName of ["implement", "check", "research"]) {
+      expect(fs.existsSync(projectFile(".codex/agents/trellis-" + agentName + ".toml"))).toBe(true);
+      expect(fs.existsSync(projectFile(".codex/agents/" + agentName + ".toml"))).toBe(false);
+    }
+    for (const agentName of [
+      "spec-review",
+      "code-review",
+      "code-architecture-review",
+      "merge-review",
+    ]) {
+      expect(fs.existsSync(projectFile(".codex/agents/trellis-" + agentName + ".toml"))).toBe(true);
+    }
+    expect(fs.existsSync(projectFile(".codex/agents/local.toml"))).toBe(true);
+    expect(readProjectFile("AGENTS.md")).toContain("# User-owned entry");
+    expect(readProjectFile(".trellis/.version")).toBe(VERSION);
+  });
+
+  it("#phase7 version-jump dry-run leaves legacy migration files untouched", async () => {
+    await setupProject();
+    const source = ".claude/commands/trellis/before-dev.md";
+    const target = ".claude/skills/trellis-before-dev/SKILL.md";
+    const sourceContent = "legacy before-dev command\n";
+    writeProjectFile(source, sourceContent);
+    fs.rmSync(projectFile(target), { recursive: true, force: true });
+    writeProjectFile(".trellis/.version", "0.4.0");
+
+    await update({ dryRun: true });
+
+    expect(readProjectFile(source)).toBe(sourceContent);
+    expect(fs.existsSync(projectFile(target))).toBe(false);
+    expect(readProjectFile(".trellis/.version")).toBe("0.4.0");
+    expect(
+      fs.readdirSync(projectFile(DIR_NAMES.WORKFLOW)).some((name) =>
+        name.startsWith(".backup-"),
+      ),
+    ).toBe(false);
+  });
+
+  it("#phase7 mixed Claude+Codex update preserves ownership and adds dispatch mode", async () => {
+    await init({ yes: true, force: true, claude: true, codex: true });
+
+    const claudeEntry = "\n\n# User Claude instructions\n";
+    const claudePath = FILE_NAMES.CLAUDE;
+    writeProjectFile(claudePath, readProjectFile(claudePath) + claudeEntry);
+    const hooksPath = ".codex/hooks.json";
+    const customHooks = "{\"hooks\":{\"UserPromptSubmit\":[]}}\n";
+    writeProjectFile(hooksPath, customHooks);
+    const foreignSkillPath = ".agents/skills/gemini-custom/SKILL.md";
+    writeProjectFile(foreignSkillPath, "foreign tool skill\n");
+    const runtimePath = ".codex/sessions/mixed-runtime.jsonl";
+    writeProjectFile(runtimePath, "mixed runtime\n");
+    writeProjectFile(
+      ".trellis/config.yaml",
+      "max_journal_lines: 2000\n\n# local mixed project config\n",
+    );
+    writeProjectFile(".trellis/.version", "0.5.6");
+
+    const removedReviewAgent = ".codex/agents/trellis-code-review.toml";
+    fs.rmSync(projectFile(removedReviewAgent), { force: true });
+    let hashes = readHashesV2(hashFilePath());
+    hashes = removeHashEntry(hashes, removedReviewAgent);
+    writeHashesV2(hashFilePath(), hashes);
+
+    await update({ skipAll: true });
+
+    expect(readProjectFile(claudePath)).toContain(claudeEntry);
+    expect(readProjectFile(hooksPath)).toBe(customHooks);
+    expect(readProjectFile(foreignSkillPath)).toBe("foreign tool skill\n");
+    expect(readProjectFile(runtimePath)).toBe("mixed runtime\n");
+    expect(readProjectFile(".trellis/config.yaml")).toContain(
+      "dispatch_mode",
+    );
+    const reviewAgent = readProjectFile(removedReviewAgent);
+    expect(reviewAgent).toContain("Only the main session dispatches Trellis agents");
+    expect(reviewAgent).toContain("return FAIL");
+  });
+
+  it("#phase7 migration conflicts preserve a user-owned target under --force", async () => {
+    await init({ yes: true, force: true, codex: true });
+
+    const source = ".codex/agents/implement.toml";
+    const target = ".codex/agents/trellis-implement.toml";
+    const sourceContent = "legacy implement agent\n";
+    const targetContent = "user-owned target agent\n";
+    writeProjectFile(source, sourceContent);
+    writeProjectFile(target, targetContent);
+    writeProjectFile(".trellis/.version", "0.5.0-beta.4");
+    const hashes = readHashesV2(hashFilePath());
+    hashes[source] = computeHash(sourceContent);
+    writeHashesV2(hashFilePath(), hashes);
+
+    await update({ migrate: true, force: true });
+
+    expect(readProjectFile(source)).toBe(sourceContent);
+    expect(readProjectFile(target)).toBe(targetContent);
+  });
+
+  it("#phase7 preserves user data in rename-dir targets", async () => {
+    await setupProject();
+
+    const sourcePath = ".trellis/agent-traces/legacy-trace.md";
+    const targetPath = ".trellis/workspace/testuser/journal-1.md";
+    writeProjectFile(sourcePath, "legacy trace\n");
+    writeProjectFile(targetPath, "user workspace data\n");
+    writeProjectFile(".trellis/.version", "0.1.0");
+
+    await update({ migrate: true, force: true, skipAll: true });
+
+    expect(readProjectFile(sourcePath)).toBe("legacy trace\n");
+    expect(readProjectFile(targetPath)).toBe("user workspace data\n");
+  });
+  it("#phase7 conflict-only migration is not skipped by the no-op path", async () => {
+    await init({ yes: true, force: true, codex: true });
+
+    const source = ".codex/agents/implement.toml";
+    const target = ".codex/agents/trellis-implement.toml";
+    const sourceContent = "legacy implement agent\n";
+    const targetContent = "user-owned target agent\n";
+    writeProjectFile(source, sourceContent);
+    writeProjectFile(target, targetContent);
+    writeProjectFile(".trellis/.version", "0.5.0-beta.4");
+    const hashes = readHashesV2(hashFilePath());
+    hashes[source] = computeHash(sourceContent);
+    hashes[target] = computeHash(targetContent);
+    writeHashesV2(hashFilePath(), hashes);
+
+    await update({ migrate: true, force: true });
+
+    expect(readProjectFile(source)).toBe(sourceContent);
+    expect(readProjectFile(target)).toBe(targetContent);
+    expect(readProjectFile(".trellis/.version")).toBe(VERSION);
+  });
+
+  it("#phase7 failed migration restores managed files and preserves runtime data", async () => {
+    await init({ yes: true, force: true, claude: true, codex: true });
+
+    const source = ".codex/agents/implement.toml";
+    const target = ".codex/agents/trellis-implement.toml";
+    const source2 = ".codex/agents/check.toml";
+    const target2 = ".codex/agents/trellis-check.toml";
+    const sourceContent = "legacy implement agent\n";
+    const sourceContent2 = "legacy check agent\n";
+    const runtimePath = ".codex/sessions/runtime.jsonl";
+    const orphanManifestPath = ".codex/sessions/manifest-only.jsonl";
+    const orphanManifestHash = computeHash("orphan manifest\n");
+    const workspacePath = ".trellis/workspace/testuser/journal-1.md";
+    const taskPath = ".trellis/tasks/user-task/task.json";
+    const specPath = ".trellis/spec/custom.md";
+    writeProjectFile(source, sourceContent);
+    writeProjectFile(source2, sourceContent2);
+    fs.rmSync(projectFile(target), { force: true });
+    fs.rmSync(projectFile(target2), { force: true });
+    writeProjectFile(runtimePath, "runtime state before\n");
+    writeProjectFile(workspacePath, "workspace state before\n");
+    writeProjectFile(taskPath, "{\"status\":\"in_progress\"}\n");
+    writeProjectFile(specPath, "user spec\n");
+    writeProjectFile(".trellis/.version", "0.5.0-beta.4");
+    let hashes = readHashesV2(hashFilePath());
+    hashes[source] = computeHash(sourceContent);
+    hashes[source2] = computeHash(sourceContent2);
+    hashes[orphanManifestPath] = orphanManifestHash;
+    hashes = removeHashEntry(hashes, target);
+    hashes = removeHashEntry(hashes, target2);
+    writeHashesV2(hashFilePath(), hashes);
+
+    const realRenameSync = fs.renameSync;
+    let renameCalls = 0;
+    const renameSpy = vi.spyOn(fs, "renameSync").mockImplementation((...args) => {
+      renameCalls++;
+      if (renameCalls === 2) {
+        writeProjectFile(runtimePath, "runtime state during\n");
+        writeProjectFile(workspacePath, "workspace state during\n");
+        throw new Error("injected migration failure");
+      }
+      return realRenameSync(...args);
+    });
+    try {
+      await expect(update({ migrate: true, force: true })).rejects.toThrow(
+        "injected migration failure",
+      );
+    } finally {
+      renameSpy.mockRestore();
+    }
+
+    expect(renameCalls).toBeGreaterThanOrEqual(2);
+    expect(readProjectFile(source)).toBe(sourceContent);
+    expect(readProjectFile(source2)).toBe(sourceContent2);
+    expect(fs.existsSync(projectFile(target))).toBe(false);
+    expect(fs.existsSync(projectFile(target2))).toBe(false);
+    expect(readProjectFile(runtimePath)).toBe("runtime state during\n");
+    expect(readProjectFile(workspacePath)).toBe("workspace state during\n");
+    expect(readProjectFile(taskPath)).toBe("{\"status\":\"in_progress\"}\n");
+    expect(readProjectFile(specPath)).toBe("user spec\n");
+    expect(readHashesV2(hashFilePath())[orphanManifestPath]).toBe(
+      orphanManifestHash,
+    );
+    expect(readProjectFile(".trellis/.version")).toBe("0.5.0-beta.4");
+    expect(
+      fs.readdirSync(projectFile(DIR_NAMES.WORKFLOW)).some((name) =>
+        name.startsWith(".backup-"),
+      ),
+    ).toBe(true);
+    const backupDirName = fs
+      .readdirSync(projectFile(DIR_NAMES.WORKFLOW))
+      .find((name) => name.startsWith(".backup-"));
+    expect(backupDirName).toBeDefined();
+    if (backupDirName) {
+      expect(
+        fs.existsSync(
+          path.join(
+            projectFile(DIR_NAMES.WORKFLOW),
+            backupDirName,
+            ".codex/sessions/runtime.jsonl",
+          ),
+        ),
+      ).toBe(false);
+    }
+  });
+
+  it("#phase7 persists orphan manifest pruning on a no-op update", async () => {
+    await setupProject();
+
+    const runtimePath = ".codex/sessions/no-op-runtime.jsonl";
+    const orphanPath = ".codex/sessions/no-op-orphan.jsonl";
+    const orphanHash = computeHash("orphan manifest\n");
+    writeProjectFile(runtimePath, "runtime data\n");
+    const hashes = readHashesV2(hashFilePath());
+    hashes[orphanPath] = orphanHash;
+    writeHashesV2(hashFilePath(), hashes);
+
+    await update({});
+
+    expect(readProjectFile(runtimePath)).toBe("runtime data\n");
+    expect(readHashesV2(hashFilePath())[orphanPath]).toBeUndefined();
+  });
+
+  it("#phase7 refuses to update a root instruction symlink", async () => {
+    await setupProject();
+
+    const outsideDir = fs.mkdtempSync(path.join(os.tmpdir(), "trellis-update-link-"));
+    const outsidePath = path.join(outsideDir, "AGENTS.md");
+    const externalContent = "external user instructions\n";
+    fs.writeFileSync(outsidePath, externalContent, "utf-8");
+    const rootPath = projectFile(FILE_NAMES.AGENTS);
+    fs.rmSync(rootPath, { force: true });
+    try {
+      fs.symlinkSync(outsidePath, rootPath, "file");
+    } catch {
+      fs.rmSync(outsideDir, { recursive: true, force: true });
+      return;
+    }
+
+    try {
+      await expect(update({ skipAll: true })).rejects.toThrow(
+        "Refusing to update symlink path",
+      );
+      expect(fs.readFileSync(outsidePath, "utf-8")).toBe(externalContent);
+      expect(fs.lstatSync(rootPath).isSymbolicLink()).toBe(true);
+    } finally {
+      fs.rmSync(outsideDir, { recursive: true, force: true });
+    }
+  });
+  it("#phase7 refuses to update a managed root symlink", async () => {
+    await init({ yes: true, force: true, codex: true });
+
+    const outsideDir = fs.mkdtempSync(path.join(os.tmpdir(), "trellis-managed-root-"));
+    const codexRoot = projectFile(".codex");
+    fs.rmSync(codexRoot, { recursive: true, force: true });
+    const linkType = process.platform === "win32" ? "junction" : "dir";
+    try {
+      fs.symlinkSync(outsideDir, codexRoot, linkType);
+    } catch {
+      fs.rmSync(outsideDir, { recursive: true, force: true });
+      return;
+    }
+
+    try {
+      await expect(update({ skipAll: true })).rejects.toThrow(
+        "Refusing to update symlink managed root",
+      );
+      expect(fs.lstatSync(codexRoot).isSymbolicLink()).toBe(true);
+    } finally {
+      fs.rmSync(outsideDir, { recursive: true, force: true });
+    }
+  });
+
+  it("#phase7 rejects a pre-existing backup symlink", async () => {
+    await setupProject();
+
+    const outsideDir = fs.mkdtempSync(path.join(os.tmpdir(), "trellis-backup-link-"));
+    const backupTimestamp = new Date("2026-08-22T13:40:00.000Z");
+    vi.setSystemTime(backupTimestamp);
+    const backupName =
+      ".backup-" +
+      backupTimestamp.toISOString().replace(/[:.]/g, "-").slice(0, 23);
+    const backupPath = projectFile(path.join(DIR_NAMES.WORKFLOW, backupName));
+    const linkType = process.platform === "win32" ? "junction" : "dir";
+    try {
+      fs.symlinkSync(outsideDir, backupPath, linkType);
+    } catch {
+      vi.useRealTimers();
+      fs.rmSync(outsideDir, { recursive: true, force: true });
+      return;
+    }
+
+    try {
+      writeProjectFile(MANAGED_FILE, "user modified before backup\n");
+      await expect(update({ force: true })).rejects.toThrow(
+        "Backup path is not a directory",
+      );
+      expect(fs.lstatSync(backupPath).isSymbolicLink()).toBe(true);
+    } finally {
+      vi.useRealTimers();
+      fs.rmSync(outsideDir, { recursive: true, force: true });
+    }
+  });
+  it("#phase7 non-native workflow remains user-managed after update", async () => {
+    await setupProject();
+    await runWorkflowCommand({ template: "tdd", force: true });
+
+    const workflowPath = PATHS.WORKFLOW_GUIDE_FILE;
+    const customWorkflow = readProjectFile(workflowPath);
+    expect(readHashesV2(hashFilePath())[workflowPath]).toBeUndefined();
+
+    await update({ skipAll: true });
+
+    expect(readProjectFile(workflowPath)).toBe(customWorkflow);
+    expect(readHashesV2(hashFilePath())[workflowPath]).toBeUndefined();
   });
 });

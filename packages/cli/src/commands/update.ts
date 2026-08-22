@@ -109,12 +109,32 @@ const PROTECTED_PATHS = [
   `${DIR_NAMES.WORKFLOW}/.current-task`,
 ];
 
+function assertManagedRootsSafe(cwd: string): void {
+  for (const relativePath of ALL_MANAGED_DIRS) {
+    const fullPath = path.join(cwd, relativePath);
+    try {
+      const stat = fs.lstatSync(fullPath);
+      if (stat.isSymbolicLink()) {
+        throw new Error(`Refusing to update symlink managed root: ${relativePath}`);
+      }
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+    }
+  }
+}
 function buildRootInstructionTemplate(
   cwd: string,
   filename: string,
   templateContent: string,
 ): string {
   const fullPath = path.join(cwd, filename);
+  try {
+    if (fs.lstatSync(fullPath).isSymbolicLink()) {
+      throw new Error("Refusing to update symlink path: " + filename);
+    }
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+  }
   if (!fs.existsSync(fullPath)) {
     return templateContent;
   }
@@ -699,6 +719,13 @@ function analyzeChanges(
 
   for (const [relativePath, newContent] of templates) {
     const fullPath = path.join(cwd, relativePath);
+    try {
+      if (fs.lstatSync(fullPath).isSymbolicLink()) {
+        throw new Error("Refusing to update symlink path: " + relativePath);
+      }
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+    }
     const exists = fs.existsSync(fullPath);
 
     const change: FileChange = {
@@ -903,7 +930,7 @@ async function promptConflictResolution(
  * Create a timestamped backup directory path
  */
 function createBackupDirPath(cwd: string): string {
-  const timestamp = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
+  const timestamp = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 23);
   return path.join(cwd, DIR_NAMES.WORKFLOW, `.backup-${timestamp}`);
 }
 
@@ -918,9 +945,19 @@ function backupFile(
   const srcPath = path.join(cwd, relativePath);
   if (!fs.existsSync(srcPath)) return;
 
+  try {
+    if (fs.lstatSync(srcPath).isSymbolicLink()) return;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+    return;
+  }
+
   const backupPath = path.join(backupDir, relativePath);
   fs.mkdirSync(path.dirname(backupPath), { recursive: true });
   fs.copyFileSync(srcPath, backupPath);
+  if (process.platform !== "win32") {
+    fs.chmodSync(backupPath, fs.statSync(srcPath).mode & 0o777);
+  }
 }
 
 /**
@@ -935,7 +972,7 @@ const BACKUP_FILES = [FILE_NAMES.AGENTS, FILE_NAMES.CLAUDE] as const;
  * Patterns to exclude from backup (user data that shouldn't be backed up)
  */
 const BACKUP_EXCLUDE_PATTERNS = [
-  ".backup-", // Previous backups
+  ".trellis/.backup-", // Previous backups
   "/node_modules", // Installed dependencies; restore via package manager
   "/workspace/", // Developer workspace (user data)
   "/tasks/", // Task data (user data)
@@ -953,6 +990,9 @@ const BACKUP_EXCLUDE_PATTERNS = [
   "/trellis-worktrees/",
   "/worktrees/",
   "/worktree/",
+  ".codex/sessions/", // Codex runtime/session data
+  ".claude/projects/", // Claude runtime/session data
+  ".trellis/.runtime/", // Active Trellis session state
 ];
 
 /**
@@ -968,8 +1008,11 @@ export function shouldExcludeFromBackup(relativePath: string): boolean {
   // project copies) and explode the scan. Same normalization pattern
   // used by `isManagedPath` in configurators/index.ts.
   const normalized = relativePath.replace(/\\/g, "/");
+  const normalizedAsDirectory = normalized.endsWith("/")
+    ? normalized
+    : normalized + "/";
   for (const pattern of BACKUP_EXCLUDE_PATTERNS) {
-    if (normalized.includes(pattern)) {
+    if (normalized.includes(pattern) || normalizedAsDirectory.includes(pattern)) {
       return true;
     }
   }
@@ -981,8 +1024,21 @@ export function shouldExcludeFromBackup(relativePath: string): boolean {
  * Backs up all managed platform/workflow directories entirely
  * (excluding user data like workspace/, tasks/, backlog/)
  */
-function createFullBackup(cwd: string): string | null {
+function createFullBackup(cwd: string): string {
   const backupDir = createBackupDirPath(cwd);
+  // Always create a snapshot directory, even when every existing path is
+  // excluded user/runtime data. An empty snapshot still lets rollback remove
+  // managed files created after the update began.
+  try {
+    const existing = fs.lstatSync(backupDir);
+    if (existing.isSymbolicLink() || !existing.isDirectory()) {
+      throw new Error(`Backup path is not a directory: ${backupDir}`);
+    }
+    throw new Error(`Backup path already exists: ${backupDir}`);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+    fs.mkdirSync(backupDir, { recursive: true });
+  }
   let hasFiles = false;
 
   for (const dir of BACKUP_DIRS) {
@@ -1008,6 +1064,12 @@ function createFullBackup(cwd: string): string | null {
   for (const relativePath of BACKUP_FILES) {
     const fullPath = path.join(cwd, relativePath);
     if (!fs.existsSync(fullPath)) continue;
+    try {
+      if (fs.lstatSync(fullPath).isSymbolicLink()) continue;
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+      continue;
+    }
     if (shouldExcludeFromBackup(relativePath)) continue;
 
     if (!hasFiles) {
@@ -1017,7 +1079,135 @@ function createFullBackup(cwd: string): string | null {
     backupFile(cwd, backupDir, relativePath);
   }
 
-  return hasFiles ? backupDir : null;
+  return backupDir;
+}
+
+/**
+ * Restore the managed portion of an update from its snapshot. Runtime data
+ * excluded by createFullBackup remains untouched; only files Trellis owns are
+ * removed/restored. This is used when a migration or template write fails
+ * after the snapshot was created.
+ */
+function restoreFullBackup(cwd: string, backupDir: string): void {
+  const backupFiles = collectAllFiles(backupDir, backupDir);
+  const backupPaths = new Set(
+    backupFiles.map((filePath) => toPosix(path.relative(backupDir, filePath))),
+  );
+
+  const currentFiles: string[] = [];
+  for (const dir of BACKUP_DIRS) {
+    currentFiles.push(...collectAllFiles(path.join(cwd, dir), cwd));
+  }
+  for (const relativePath of BACKUP_FILES) {
+    const fullPath = path.join(cwd, relativePath);
+    if (!fs.existsSync(fullPath)) continue;
+    try {
+      if (fs.lstatSync(fullPath).isSymbolicLink()) continue;
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+      continue;
+    }
+    currentFiles.push(fullPath);
+  }
+
+  for (const currentPath of currentFiles) {
+    const relativePath = toPosix(path.relative(cwd, currentPath));
+    // Excluded paths are user/runtime data. They are intentionally absent from
+    // the snapshot and must survive a failed update unchanged.
+    if (shouldExcludeFromBackup(relativePath)) continue;
+    if (!backupPaths.has(relativePath)) {
+      fs.rmSync(currentPath, { force: true });
+    }
+  }
+
+  for (const backupPath of backupFiles) {
+    const relativePath = path.relative(backupDir, backupPath);
+    const targetPath = path.join(cwd, relativePath);
+    try {
+      if (fs.lstatSync(targetPath).isSymbolicLink()) continue;
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+    }
+    fs.mkdirSync(path.dirname(targetPath), { recursive: true });
+    fs.copyFileSync(backupPath, targetPath);
+    if (process.platform !== "win32") {
+      fs.chmodSync(targetPath, fs.statSync(backupPath).mode & 0o777);
+    }
+  }
+}
+
+interface WorkspaceTraceSnapshot {
+  relativePath: string;
+  content: Buffer | null;
+}
+
+/** Capture the workspace paths touched by the inline migration. */
+function captureWorkspaceTraceSnapshot(cwd: string): WorkspaceTraceSnapshot[] {
+  const workspaceDir = path.join(cwd, PATHS.WORKSPACE);
+  if (!fs.existsSync(workspaceDir)) return [];
+
+  const snapshots: WorkspaceTraceSnapshot[] = [];
+  for (const devEntry of fs.readdirSync(workspaceDir, { withFileTypes: true })) {
+    if (devEntry.isSymbolicLink() || !devEntry.isDirectory()) continue;
+    const devPath = path.join(workspaceDir, devEntry.name);
+
+    const switchRelativePath = toPosix(
+      path.relative(cwd, path.join(devPath, "trellis-switch.json")),
+    );
+    const switchPath = path.join(cwd, switchRelativePath);
+    const switchStat = fs.existsSync(switchPath) ? fs.lstatSync(switchPath) : null;
+    if (!switchStat?.isSymbolicLink()) {
+      snapshots.push({
+        relativePath: switchRelativePath,
+        content:
+          switchStat?.isFile()
+            ? fs.readFileSync(switchPath)
+            : null,
+      });
+    }
+
+    for (const fileEntry of fs.readdirSync(devPath, { withFileTypes: true })) {
+      if (fileEntry.isSymbolicLink() || !fileEntry.isFile()) continue;
+      const file = fileEntry.name;
+      if (!file.startsWith("traces-") || !file.endsWith(".md")) continue;
+      const traceRelativePath = toPosix(
+        path.relative(cwd, path.join(devPath, file)),
+      );
+      const journalRelativePath = toPosix(
+        path.relative(cwd, path.join(devPath, file.replace(/^traces-/, "journal-"))),
+      );
+      for (const relativePath of [traceRelativePath, journalRelativePath]) {
+        const fullPath = path.join(cwd, relativePath);
+        const stat = fs.existsSync(fullPath) ? fs.lstatSync(fullPath) : null;
+        if (stat?.isSymbolicLink()) continue;
+        snapshots.push({
+          relativePath,
+          content: stat?.isFile() ? fs.readFileSync(fullPath) : null,
+        });
+      }
+    }
+  }
+  return snapshots;
+}
+
+function restoreWorkspaceTraceSnapshot(
+  cwd: string,
+  snapshots: WorkspaceTraceSnapshot[],
+): void {
+  for (const snapshot of snapshots) {
+    const fullPath = path.join(cwd, snapshot.relativePath);
+    try {
+      if (fs.lstatSync(fullPath).isSymbolicLink()) continue;
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+    }
+    if (snapshot.content === null) {
+      fs.rmSync(fullPath, { force: true });
+      continue;
+    }
+    fs.mkdirSync(path.dirname(fullPath), { recursive: true });
+    fs.writeFileSync(fullPath, snapshot.content);
+  }
 }
 
 /**
@@ -1034,13 +1224,15 @@ function ensureTrellisSwitchForAllDevelopers(cwd: string): void {
     return;
   }
 
-  for (const devName of fs.readdirSync(workspaceDir)) {
-    const devDir = path.join(workspaceDir, devName);
-    if (!fs.statSync(devDir).isDirectory()) continue;
+  for (const devEntry of fs.readdirSync(workspaceDir, { withFileTypes: true })) {
+    if (devEntry.isSymbolicLink() || !devEntry.isDirectory()) continue;
+    const devDir = path.join(workspaceDir, devEntry.name);
 
     const switchFile = path.join(devDir, "trellis-switch.json");
-    if (fs.existsSync(switchFile)) {
-      continue;
+    try {
+      if (fs.lstatSync(switchFile)) continue;
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
     }
 
     fs.writeFileSync(
@@ -1085,6 +1277,12 @@ async function getLatestNpmVersion(): Promise<string | null> {
  */
 function collectAllFiles(dirPath: string, cwd = process.cwd()): string[] {
   if (!fs.existsSync(dirPath)) return [];
+  try {
+    const rootStat = fs.lstatSync(dirPath);
+    if (rootStat.isSymbolicLink() || !rootStat.isDirectory()) return [];
+  } catch {
+    return [];
+  }
 
   const files: string[] = [];
   const stack = [dirPath];
@@ -1103,10 +1301,10 @@ function collectAllFiles(dirPath: string, cwd = process.cwd()): string[] {
       // `isSymbolicLink()` returns true for NTFS junctions since v12.
       if (entry.isSymbolicLink()) continue;
 
+      if (shouldExcludeFromBackup(relativePath)) continue;
+
       if (entry.isDirectory()) {
-        if (!shouldExcludeFromBackup(relativePath)) {
-          stack.push(fullPath);
-        }
+        stack.push(fullPath);
       } else if (entry.isFile()) {
         files.push(fullPath);
       }
@@ -1122,6 +1320,22 @@ function collectAllFiles(dirPath: string, cwd = process.cwd()): string[] {
  * - All files are tracked and unmodified, OR
  * - All files match current template content (even if not tracked)
  */
+function containsExcludedData(dirPath: string, cwd: string): boolean {
+  const stack = [dirPath];
+  while (stack.length > 0) {
+    const currentDir = stack.pop();
+    if (!currentDir) continue;
+    for (const entry of fs.readdirSync(currentDir, { withFileTypes: true })) {
+      const fullPath = path.join(currentDir, entry.name);
+      const relativePath = path.relative(cwd, fullPath);
+      if (entry.isSymbolicLink() || shouldExcludeFromBackup(relativePath)) {
+        return true;
+      }
+      if (entry.isDirectory()) stack.push(fullPath);
+    }
+  }
+  return false;
+}
 function isDirectorySafeToReplace(
   cwd: string,
   dirRelativePath: string,
@@ -1130,6 +1344,9 @@ function isDirectorySafeToReplace(
 ): boolean {
   const dirFullPath = path.join(cwd, dirRelativePath);
   if (!fs.existsSync(dirFullPath)) return true;
+  if (shouldExcludeFromBackup(dirRelativePath) || containsExcludedData(dirFullPath, cwd)) {
+    return false;
+  }
 
   const files = collectAllFiles(dirFullPath, cwd);
   if (files.length === 0) return true; // Empty directory is safe
@@ -1701,6 +1918,8 @@ export async function update(options: UpdateOptions): Promise<void> {
   const pythonCommand = process.env.TRELLIS_PYTHON_CMD?.trim();
   if (pythonCommand) setResolvedPythonCommand(pythonCommand);
 
+  assertManagedRootsSafe(cwd);
+
   // Check if Trellis is initialized
   if (!fs.existsSync(path.join(cwd, DIR_NAMES.WORKFLOW))) {
     console.log(chalk.red("Error: Trellis not initialized in this directory."));
@@ -1774,6 +1993,7 @@ export async function update(options: UpdateOptions): Promise<void> {
 
   // Load template hashes for modification detection
   let hashes = loadHashes(cwd);
+  let manifestNeedsPersist = false;
   const isFirstHashTracking = Object.keys(hashes).length === 0;
 
   // Handle unknown version - skip regular migrations but safe-file-delete still runs
@@ -1824,6 +2044,7 @@ export async function update(options: UpdateOptions): Promise<void> {
       cwd,
       [...configuredPlatforms],
       hashes,
+      { persist: false },
     );
     if (prune.pruned.length > 0) {
       console.log(
@@ -1832,6 +2053,7 @@ export async function update(options: UpdateOptions): Promise<void> {
         ),
       );
       hashes = prune.hashes;
+      manifestNeedsPersist = true;
     }
   }
 
@@ -1928,6 +2150,19 @@ export async function update(options: UpdateOptions): Promise<void> {
     );
 
     printMigrationSummary(classifiedMigrations);
+
+    // A migration conflict means both paths contain user-owned content. Keep
+    // the target out of the normal template write pass even under --force so
+    // update cannot silently overwrite the file the conflict warning refers to.
+    for (const conflict of classifiedMigrations.conflict) {
+      if (!conflict.to) continue;
+      const prefix = conflict.to.endsWith("/") ? conflict.to : conflict.to + "/";
+      for (const templatePath of [...templates.keys()]) {
+        if (templatePath === conflict.to || templatePath.startsWith(prefix)) {
+          templates.delete(templatePath);
+        }
+      }
+    }
 
     // Hard-stop: pending rename/delete work from a breaking release requires --migrate.
     // Why: without --migrate, those entries are skipped and update()'s later path silently
@@ -2028,18 +2263,10 @@ export async function update(options: UpdateOptions): Promise<void> {
 
   // Check if we have pending migrations that need to be applied
   const hasPendingMigrations =
-    options.migrate &&
     classifiedMigrations &&
     (classifiedMigrations.auto.length > 0 ||
-      classifiedMigrations.confirm.length > 0);
-
-  if (!options.dryRun && getConfiguredPlatforms(cwd).has("claude-code")) {
-    try {
-      ensureTrellisSwitchForAllDevelopers(cwd);
-    } catch {
-      // Silent failure
-    }
-  }
+      classifiedMigrations.confirm.length > 0 ||
+      classifiedMigrations.conflict.length > 0);
 
   if (
     changes.newFiles.length === 0 &&
@@ -2048,8 +2275,23 @@ export async function update(options: UpdateOptions): Promise<void> {
     !hasPendingMigrations &&
     !hasSafeDeletes
   ) {
+    // Same-version updates historically self-heal developer switch files even
+    // when no managed template changes are pending. There is no later write on
+    // this path, so no rollback snapshot is required.
+    if (!options.dryRun && getConfiguredPlatforms(cwd).has("claude-code")) {
+      try {
+        ensureTrellisSwitchForAllDevelopers(cwd);
+      } catch {
+        // Best effort, matching the historical update behavior.
+      }
+    }
+
     if (!options.dryRun && missingRootInstructionHashes.size > 0) {
       updateHashes(cwd, missingRootInstructionHashes);
+    }
+
+    if (!options.dryRun && manifestNeedsPersist) {
+      saveHashes(cwd, hashes);
     }
 
     if (isSameVersion) {
@@ -2170,8 +2412,25 @@ export async function update(options: UpdateOptions): Promise<void> {
     );
   }
 
-  // Execute migrations if --migrate flag is set
-  if (options.migrate && classifiedMigrations) {
+  const workspaceTraceSnapshot = captureWorkspaceTraceSnapshot(cwd);
+  let createdMigrationTaskDir: string | null = null;
+
+  try {
+    if (!options.dryRun && manifestNeedsPersist) {
+      saveHashes(cwd, hashes);
+    }
+
+    if (!options.dryRun && getConfiguredPlatforms(cwd).has("claude-code")) {
+      try {
+        ensureTrellisSwitchForAllDevelopers(cwd);
+      } catch {
+        // Preserve the historical best-effort behavior while keeping the write
+        // inside the rollback boundary for real updates.
+      }
+    }
+
+    // Execute migrations if --migrate flag is set
+    if (options.migrate && classifiedMigrations) {
     const migrationResult = await executeMigrations(classifiedMigrations, cwd, {
       force: options.force,
       skipAll: options.skipAll,
@@ -2186,17 +2445,31 @@ export async function update(options: UpdateOptions): Promise<void> {
     const workspaceDir = path.join(cwd, PATHS.WORKSPACE);
     if (fs.existsSync(workspaceDir)) {
       let journalRenamed = 0;
-      const devDirs = fs.readdirSync(workspaceDir);
-      for (const dev of devDirs) {
-        const devPath = path.join(workspaceDir, dev);
-        if (!fs.statSync(devPath).isDirectory()) continue;
+      const devDirs = fs.readdirSync(workspaceDir, { withFileTypes: true });
+      for (const devEntry of devDirs) {
+        if (devEntry.isSymbolicLink() || !devEntry.isDirectory()) continue;
+        const devPath = path.join(workspaceDir, devEntry.name);
 
-        const files = fs.readdirSync(devPath);
-        for (const file of files) {
+        const files = fs.readdirSync(devPath, { withFileTypes: true });
+        for (const fileEntry of files) {
+          if (fileEntry.isSymbolicLink() || !fileEntry.isFile()) continue;
+          const file = fileEntry.name;
           if (file.startsWith("traces-") && file.endsWith(".md")) {
             const oldPath = path.join(devPath, file);
-            const newFile = file.replace("traces-", "journal-");
+            const newFile = file.replace(/^traces-/, "journal-");
             const newPath = path.join(devPath, newFile);
+            if (fs.existsSync(newPath)) {
+              console.log(
+                chalk.yellow(
+                  "Skipped " +
+                    path.relative(cwd, oldPath) +
+                    " because " +
+                    path.relative(cwd, newPath) +
+                    " already exists",
+                ),
+              );
+              continue;
+            }
             fs.renameSync(oldPath, newPath);
             journalRenamed++;
           }
@@ -2401,6 +2674,7 @@ export async function update(options: UpdateOptions): Promise<void> {
 
       // Check if task already exists
       if (!fs.existsSync(taskDir)) {
+        createdMigrationTaskDir = taskDir;
         fs.mkdirSync(taskDir, { recursive: true });
 
         // Get current developer for assignee.
@@ -2530,5 +2804,28 @@ export async function update(options: UpdateOptions): Promise<void> {
 
       console.log(chalk.cyan("═".repeat(60)));
     }
+  }
+  } catch (error) {
+    try {
+      if (backupDir) restoreFullBackup(cwd, backupDir);
+      restoreWorkspaceTraceSnapshot(cwd, workspaceTraceSnapshot);
+      if (createdMigrationTaskDir) {
+        fs.rmSync(createdMigrationTaskDir, { recursive: true, force: true });
+      }
+    } catch (restoreError) {
+      console.error(
+        chalk.red(
+          "Update failed and automatic restore also failed: " +
+            (restoreError instanceof Error ? restoreError.message : String(restoreError)),
+        ),
+      );
+    }
+    console.error(
+      chalk.red(
+        "Update failed; restored the pre-update snapshot. " +
+          (error instanceof Error ? error.message : String(error)),
+      ),
+    );
+    throw error;
   }
 }

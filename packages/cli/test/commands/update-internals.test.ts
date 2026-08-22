@@ -240,10 +240,20 @@ describe("shouldExcludeFromBackup", () => {
     ".trellis/spec/cli/backend/index.md",
     ".trellis/backlog/idea.md",
     ".trellis/agent-traces/trace.jsonl",
+    ".codex/sessions/runtime.jsonl",
+    ".claude/projects/session.jsonl",
+    ".trellis/.runtime/sessions/active.json",
   ])("excludes user data %s", (p) => {
     expect(shouldExcludeFromBackup(p)).toBe(true);
   });
 
+  it.each([
+    ".codex/sessions",
+    ".claude/projects",
+    ".trellis/.runtime",
+  ])("excludes runtime directory root %s", (p) => {
+    expect(shouldExcludeFromBackup(p)).toBe(true);
+  });
   it("excludes previous backups", () => {
     expect(
       shouldExcludeFromBackup(".trellis/.backup-2026-04-20T01-00-00/x"),

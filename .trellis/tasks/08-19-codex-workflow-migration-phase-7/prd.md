@@ -17,6 +17,13 @@
 
 ## 验收标准
 
-- [ ] 使用版本跳跃 fixture 验证迁移，而非只断言 manifest 或源码文本。
-- [ ] 用户入口、agent、skill 与运行时数据在成功和失败路径中均被保护。
-- [ ] mixed Claude+Codex update 顺序和 ownership 可验证。
+- [x] 使用真实版本跳跃 fixture 验证迁移，而非只断言 manifest 或源码文本。
+- [x] 用户入口、agent、skill 与运行时数据在成功和失败路径中均被保护。
+- [x] mixed Claude+Codex update 顺序和 ownership 可验证。
+
+## 实现边界与假设
+
+- 本阶段只修改历史项目 update/migration 链路及其真实回归 fixture；发布打包、tarball 和 clean-install E2E 留到阶段 8。
+- 备份只覆盖 Trellis 管理文件；workspace、tasks、spec、backlog、worktree、trace 及 Codex/Claude runtime 数据按既有用户数据契约保留。
+- 对 managed root、入口文件、备份目录和恢复目标的 symlink/junction 采取 fail-closed，避免 update 跟随外部路径；未配置平台的共享根也按安全保护处理。
+- non-native workflow 继续使用既有 hash 契约；不把用户自定义 workflow 当成 native 内容更新。

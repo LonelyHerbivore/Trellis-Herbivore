@@ -2,31 +2,58 @@
   "id": "codex-workflow-migration-phase-7",
   "name": "codex-workflow-migration-phase-7",
   "title": "Codex 工作流无缝迁移 - 阶段 7：历史项目 update/migration 兼容",
-  "description": "",
-  "status": "planning",
+  "description": "历史项目 update/migration 兼容、用户数据保护和失败恢复",
+  "status": "completed",
   "dev_type": null,
-  "scope": null,
-  "package": null,
+  "scope": "packages/cli/src/commands/update.ts; packages/cli/test/commands/update*.test.ts; phase-7 task artifacts",
+  "package": "trellis-hgl",
   "priority": "P1",
   "creator": "codex",
   "assignee": "codex",
   "createdAt": "2026-08-19",
-  "completedAt": null,
+  "completedAt": "2026-08-22",
   "branch": "task/codex-workflow-seamless-migration",
   "base_branch": "main",
   "worktree_path": "D:\\Trellis\\Trellis-0.6.0-beta.17",
-  "commit": null,
+  "commit": "feat(trellis): complete codex workflow migration phase 7",
   "pr_url": null,
   "subtasks": [],
   "children": [],
   "parent": "08-19-codex-workflow-seamless-migration",
-  "relatedFiles": [],
-  "notes": "协调会话负责编排和收敛；实施、测试和独立 review 由明确文件边界的执行 agent 完成。",
+  "relatedFiles": [
+    "packages/cli/src/commands/update.ts",
+    "packages/cli/test/commands/update.integration.test.ts",
+    "packages/cli/test/commands/update-internals.test.ts"
+  ],
+  "notes": "阶段7只处理历史项目 update/migration；阶段8 release-preflight、pack 与 clean-install 文件保持未提交。四道 review gate 与最终验证均已通过，待提交后写入 commit hash。",
   "meta": {
     "host_platform": "codex",
     "execution_mode": "subagent-orchestrated",
     "worktree_selection": "current_checkout",
     "development_flow": "default",
-    "review_gate_selection": { "spec-review": "enabled", "code-review": "enabled", "code-architecture-review": "enabled", "merge-review": "enabled" }
+    "review_gate_selection": {
+      "spec-review": "enabled",
+      "code-review": "enabled",
+      "code-architecture-review": "enabled",
+      "merge-review": "enabled"
+    },
+    "review_gate_status": {
+      "spec-review": "passed",
+      "code-review": "passed",
+      "code-architecture-review": "passed",
+      "merge-review": "passed"
+    },
+    "validation": {
+      "targeted_tests": "2 files, 111 passed",
+      "orphan_manifest_regression": "14 passed",
+      "core_tests": "16 files, 272 passed",
+      "cli_tests": "45 files passed, 1 skipped file, 1300 passed, 3 skipped",
+      "typecheck": "passed",
+      "build": "passed",
+      "lint": "passed",
+      "python_compile": "passed",
+      "task_validate": "passed",
+      "diff_check": "passed"
+    }
   }
 }
