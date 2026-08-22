@@ -585,11 +585,11 @@ describe("release tarball clean-install", () => {
           ],
           consumerRoot,
         );
-        const globalCliRoot = path.join(
-          globalPrefix,
-          "node_modules",
-          cliPackage.name,
-        );
+        const globalNodeModules =
+          process.platform === "win32"
+            ? path.join(globalPrefix, "node_modules")
+            : path.join(globalPrefix, "lib", "node_modules");
+        const globalCliRoot = path.join(globalNodeModules, cliPackage.name);
         const globalCliEntry = path.join(globalCliRoot, "bin", "trellis.js");
         expect(fs.existsSync(globalCliEntry)).toBe(true);
         assertNoConsumerDevelopmentPaths(globalCliRoot);
