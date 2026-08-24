@@ -1,5 +1,5 @@
 import path from "node:path";
-import { AI_TOOLS } from "../types/ai-tools.js";
+import { AI_TOOLS, getTemplateContext } from "../types/ai-tools.js";
 import { ensureDir, writeFile } from "../utils/file-writer.js";
 import {
   resolvePlaceholders,
@@ -22,7 +22,7 @@ import { getAllAgents, getHooksConfig } from "../templates/cursor/index.js";
  */
 export async function configureCursor(cwd: string): Promise<void> {
   const config = AI_TOOLS.cursor;
-  const ctx = config.templateContext;
+  const ctx = getTemplateContext("cursor");
   const configRoot = path.join(cwd, config.configDir);
 
   const commandsDir = path.join(configRoot, "commands");

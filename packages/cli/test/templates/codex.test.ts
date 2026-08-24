@@ -7,7 +7,7 @@ import {
   getConfigTemplate,
 } from "../../src/templates/codex/index.js";
 import { resolveAllAsSkills } from "../../src/configurators/shared.js";
-import { AI_TOOLS } from "../../src/types/ai-tools.js";
+import { getTemplateContext } from "../../src/types/ai-tools.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(__dirname, "../../../..");
@@ -32,7 +32,7 @@ const EXPECTED_AGENT_NAMES = [
 // Shared skills are now sourced from common/ via resolveAllAsSkills
 describe("codex shared skills (from common source)", () => {
   it("resolves all common templates for codex context", () => {
-    const skills = resolveAllAsSkills(AI_TOOLS.codex.templateContext);
+    const skills = resolveAllAsSkills(getTemplateContext("codex"));
     expect(skills.length).toBeGreaterThan(0);
     for (const skill of skills) {
       expect(skill.content).toContain("description:");
@@ -41,7 +41,7 @@ describe("codex shared skills (from common source)", () => {
   });
 
   it("does not include platform-specific syntax in resolved output", () => {
-    const skills = resolveAllAsSkills(AI_TOOLS.codex.templateContext);
+    const skills = resolveAllAsSkills(getTemplateContext("codex"));
     for (const skill of skills) {
       // Codex uses $ prefix, not /trellis:
       expect(skill.content).not.toContain("/trellis:");
@@ -100,7 +100,7 @@ describe("codex read-only review agents", () => {
 
 describe("codex shared skill source", () => {
   it("exposes trellis-break-loop from the common template source", () => {
-    const skills = resolveAllAsSkills(AI_TOOLS.codex.templateContext);
+    const skills = resolveAllAsSkills(getTemplateContext("codex"));
     const breakLoop = skills.find((skill) => skill.name === "trellis-break-loop");
     const commonSource = fs.readFileSync(
       path.join(repoRoot, "packages/cli/src/templates/common/skills/break-loop.md"),
@@ -119,6 +119,9 @@ describe("codex getConfigTemplate", () => {
     expect(config.targetPath).toBe("config.toml");
     expect(config.content).toContain("project_doc_fallback_filenames");
     expect(config.content).toContain("AGENTS.md");
+    expect(config.content).toContain("min_wait_timeout_ms = 50000");
+    expect(config.content).toContain("default_wait_timeout_ms = 120000");
+    expect(config.content).toContain("max_wait_timeout_ms = 240000");
   });
 });
 

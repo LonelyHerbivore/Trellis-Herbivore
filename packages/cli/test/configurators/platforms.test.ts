@@ -7,8 +7,9 @@ import {
   configurePlatform,
   collectPlatformTemplates,
   PLATFORM_IDS,
+  getInitToolChoices,
 } from "../../src/configurators/index.js";
-import { AI_TOOLS } from "../../src/types/ai-tools.js";
+import { AI_TOOLS, getTemplateContext } from "../../src/types/ai-tools.js";
 import { setWriteMode } from "../../src/utils/file-writer.js";
 import {
   getAllAgents as getAllCodexAgents,
@@ -213,6 +214,20 @@ describe("getConfiguredPlatforms", () => {
   });
 });
 
+describe("getInitToolChoices", () => {
+  it("exposes only Claude Code and Codex with both selected by default", () => {
+    const choices = getInitToolChoices();
+
+    expect(choices.map((choice) => choice.platformId)).toEqual([
+      "claude-code",
+      "codex",
+    ]);
+    expect(choices.map((choice) => choice.key)).toEqual(["claude", "codex"]);
+    expect(choices.map((choice) => choice.name)).toEqual(["Claude Code", "Codex"]);
+    expect(choices.every((choice) => choice.defaultChecked)).toBe(true);
+  });
+});
+
 // =============================================================================
 // configurePlatform — copies templates to target directory
 // =============================================================================
@@ -295,7 +310,7 @@ describe("configurePlatform", () => {
     // Plus a Codex-specific `trellis-start` skill referenced by the
     // <trellis-bootstrap> notice in inject-workflow-state.py (the SessionStart
     // hook was removed for de-recursion).
-    const expected = resolveAllAsSkillsNeutral(AI_TOOLS.codex.templateContext);
+    const expected = resolveAllAsSkillsNeutral(getTemplateContext("codex"));
     const skillsRoot = path.join(tmpDir, ".agents", "skills");
     const actualNames = fs
       .readdirSync(skillsRoot, { withFileTypes: true })
@@ -450,7 +465,7 @@ describe("configurePlatform", () => {
   it("configurePlatform('kiro') writes all skill templates from common source", async () => {
     await configurePlatform("kiro", tmpDir);
 
-    const expected = resolveAllAsSkills(AI_TOOLS.kiro.templateContext);
+    const expected = resolveAllAsSkills(getTemplateContext("kiro"));
     const skillsRoot = path.join(tmpDir, ".kiro", "skills");
     const actualNames = fs
       .readdirSync(skillsRoot, { withFileTypes: true })
@@ -485,7 +500,7 @@ describe("configurePlatform", () => {
       .readdirSync(commandsDir)
       .filter((f) => f.endsWith(".toml"));
     expect(tomlFiles.length).toBe(
-      resolveCommands(AI_TOOLS.gemini.templateContext).length,
+      resolveCommands(getTemplateContext("gemini")).length,
     );
 
     // Skills as SKILL.md under the shared `.agents/skills/` root (Gemini CLI
@@ -499,8 +514,8 @@ describe("configurePlatform", () => {
       .readdirSync(skillsDir, { withFileTypes: true })
       .filter((e) => e.isDirectory());
     expect(skillDirs.length).toBe(
-      resolveSkills(AI_TOOLS.gemini.templateContext).length +
-        resolveBundledSkills(AI_TOOLS.gemini.templateContext).filter((file) =>
+      resolveSkills(getTemplateContext("gemini")).length +
+        resolveBundledSkills(getTemplateContext("gemini")).filter((file) =>
           file.relativePath.endsWith("/SKILL.md"),
         ).length,
     );
@@ -542,7 +557,7 @@ describe("configurePlatform", () => {
   it("configurePlatform('antigravity') writes all workflow templates from common source", async () => {
     await configurePlatform("antigravity", tmpDir);
 
-    const expected = resolveCommands(AI_TOOLS.antigravity.templateContext);
+    const expected = resolveCommands(getTemplateContext("antigravity"));
     const workflowsRoot = path.join(tmpDir, ".agent", "workflows");
     const actualNames = fs
       .readdirSync(workflowsRoot, { withFileTypes: true })
@@ -576,7 +591,7 @@ describe("configurePlatform", () => {
       .readdirSync(workflowsRoot)
       .filter((f) => f.endsWith(".md"));
     expect(wfFiles.length).toBe(
-      resolveCommands(AI_TOOLS.windsurf.templateContext).length,
+      resolveCommands(getTemplateContext("windsurf")).length,
     );
 
     // Skills
@@ -586,8 +601,8 @@ describe("configurePlatform", () => {
       .readdirSync(skillsDir, { withFileTypes: true })
       .filter((e) => e.isDirectory());
     expect(skillDirs.length).toBe(
-      resolveSkills(AI_TOOLS.windsurf.templateContext).length +
-        resolveBundledSkills(AI_TOOLS.windsurf.templateContext).filter((file) =>
+      resolveSkills(getTemplateContext("windsurf")).length +
+        resolveBundledSkills(getTemplateContext("windsurf")).filter((file) =>
           file.relativePath.endsWith("/SKILL.md"),
         ).length,
     );
@@ -601,7 +616,7 @@ describe("configurePlatform", () => {
   it("configurePlatform('qoder') writes commands + skills with the correct split", async () => {
     await configurePlatform("qoder", tmpDir);
 
-    const ctx = AI_TOOLS.qoder.templateContext;
+    const ctx = getTemplateContext("qoder");
     const expectedCommands = resolveCommands(ctx);
     const expectedSkills = resolveSkills(ctx);
 
@@ -671,7 +686,7 @@ describe("configurePlatform", () => {
   it("configurePlatform('codebuddy') writes all command templates from common source", async () => {
     await configurePlatform("codebuddy", tmpDir);
 
-    const expected = resolveCommands(AI_TOOLS.codebuddy.templateContext);
+    const expected = resolveCommands(getTemplateContext("codebuddy"));
     const commandsDir = path.join(tmpDir, ".codebuddy", "commands", "trellis");
     expect(fs.existsSync(commandsDir)).toBe(true);
 
@@ -748,7 +763,7 @@ describe("configurePlatform", () => {
       .readdirSync(promptsDir)
       .filter((f) => f.endsWith(".prompt.md"));
     expect(promptFiles.length).toBe(
-      resolveCommands(AI_TOOLS.copilot.templateContext).length,
+      resolveCommands(getTemplateContext("copilot")).length,
     );
 
     // Skills
@@ -758,8 +773,8 @@ describe("configurePlatform", () => {
       .readdirSync(skillsDir, { withFileTypes: true })
       .filter((e) => e.isDirectory());
     expect(skillDirs.length).toBe(
-      resolveSkills(AI_TOOLS.copilot.templateContext).length +
-        resolveBundledSkills(AI_TOOLS.copilot.templateContext).filter((file) =>
+      resolveSkills(getTemplateContext("copilot")).length +
+        resolveBundledSkills(getTemplateContext("copilot")).filter((file) =>
           file.relativePath.endsWith("/SKILL.md"),
         ).length,
     );

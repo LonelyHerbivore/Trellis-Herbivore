@@ -104,6 +104,17 @@ export interface EnsureCodexRequestUserInputOptions {
   pythonCommand?: string;
 }
 
+// A single CLI process can reach this check through overlapping init/update
+// work. Share the in-flight result per user home so one operation cannot show
+// the same request_user_input confirmation more than once. Dry-runs stay out
+// of the cache because they never inspect or mutate user configuration.
+const inFlightChecks = new Map<string, Promise<CodexUserConfigResult>>();
+
+function getInFlightKey(home: string): string {
+  const resolved = path.resolve(home);
+  return process.platform === "win32" ? resolved.toLowerCase() : resolved;
+}
+
 function normalizeLines(content: string): {
   lines: string[];
   eol: string;
@@ -668,7 +679,7 @@ async function ensureCodexConfigFile(
   return buildResult("enabled", "codex-config", configPath, plan, backupPath);
 }
 
-export async function ensureCodexRequestUserInput(
+async function ensureCodexRequestUserInputImpl(
   options: EnsureCodexRequestUserInputOptions,
 ): Promise<CodexUserConfigResult> {
   const home = options.homeDir ?? homedir();
@@ -791,4 +802,23 @@ export async function ensureCodexRequestUserInput(
   }
 
   return ensureCodexConfigFile(home, options);
+}
+
+export async function ensureCodexRequestUserInput(
+  options: EnsureCodexRequestUserInputOptions,
+): Promise<CodexUserConfigResult> {
+  if (options.dryRun) return ensureCodexRequestUserInputImpl(options);
+
+  const home = path.resolve(options.homeDir ?? homedir());
+  const key = getInFlightKey(home);
+  const existing = inFlightChecks.get(key);
+  if (existing) return existing;
+
+  const pending = ensureCodexRequestUserInputImpl({ ...options, homeDir: home });
+  inFlightChecks.set(key, pending);
+  const clear = (): void => {
+    if (inFlightChecks.get(key) === pending) inFlightChecks.delete(key);
+  };
+  void pending.then(clear, clear);
+  return pending;
 }

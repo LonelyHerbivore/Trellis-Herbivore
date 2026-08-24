@@ -1,5 +1,5 @@
 import path from "node:path";
-import { AI_TOOLS } from "../types/ai-tools.js";
+import { getTemplateContext } from "../types/ai-tools.js";
 import { ensureDir, writeFile } from "../utils/file-writer.js";
 import {
   resolveBundledSkills,
@@ -14,7 +14,7 @@ import {
  * - skills/trellis-{name}/SKILL.md — other 5 as auto-triggered skills
  */
 export async function configureKilo(cwd: string): Promise<void> {
-  const ctx = AI_TOOLS.kilo.templateContext;
+  const ctx = getTemplateContext("kilo");
 
   const workflowsDir = path.join(cwd, ".kilocode", "workflows");
   ensureDir(workflowsDir);

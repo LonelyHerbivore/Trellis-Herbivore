@@ -1,5 +1,5 @@
 import path from "node:path";
-import { AI_TOOLS } from "../types/ai-tools.js";
+import { AI_TOOLS, getTemplateContext } from "../types/ai-tools.js";
 import { ensureDir, writeFile } from "../utils/file-writer.js";
 import {
   resolvePlaceholders,
@@ -25,7 +25,7 @@ import { getAllAgents, getSettingsTemplate } from "../templates/qoder/index.js";
  */
 export async function configureQoder(cwd: string): Promise<void> {
   const config = AI_TOOLS.qoder;
-  const ctx = config.templateContext;
+  const ctx = getTemplateContext("qoder");
   const configRoot = path.join(cwd, config.configDir);
 
   const commandsDir = path.join(configRoot, "commands");

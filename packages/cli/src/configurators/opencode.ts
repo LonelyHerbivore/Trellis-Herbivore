@@ -1,6 +1,6 @@
 import { readFileSync, readdirSync, statSync } from "node:fs";
 import path from "node:path";
-import { AI_TOOLS } from "../types/ai-tools.js";
+import { getTemplateContext } from "../types/ai-tools.js";
 import { getOpenCodeTemplatePath } from "../templates/extract.js";
 import { ensureDir, writeFile } from "../utils/file-writer.js";
 import { toPosix } from "../utils/posix.js";
@@ -85,7 +85,7 @@ function walkOpenCodeTemplateDir(): Map<string, string> {
  */
 export function collectOpenCodeTemplates(): Map<string, string> {
   const files = walkOpenCodeTemplateDir();
-  const ctx = AI_TOOLS.opencode.templateContext;
+  const ctx = getTemplateContext("opencode");
   for (const cmd of resolveCommands(ctx)) {
     files.set(`.opencode/commands/trellis/${cmd.name}.md`, cmd.content);
   }

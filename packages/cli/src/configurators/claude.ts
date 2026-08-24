@@ -1,6 +1,6 @@
 import { readFileSync, readdirSync, statSync } from "node:fs";
 import path from "node:path";
-import { AI_TOOLS } from "../types/ai-tools.js";
+import { getTemplateContext } from "../types/ai-tools.js";
 import {
   getAllCommands as getClaudeCommands,
 } from "../templates/claude/index.js";
@@ -76,7 +76,7 @@ async function copyDirFiltered(
 export async function configureClaude(cwd: string): Promise<void> {
   const sourcePath = getClaudeTemplatePath();
   const destPath = path.join(cwd, ".claude");
-  const ctx = AI_TOOLS["claude-code"].templateContext;
+  const ctx = getTemplateContext("claude-code");
 
   // Copy platform-specific files (agents, settings) — hooks come from shared-hooks
   await copyDirFiltered(sourcePath, destPath, ["commands", "hooks"]);

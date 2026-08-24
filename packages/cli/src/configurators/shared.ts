@@ -5,7 +5,7 @@
  * configurators cannot import from index.ts).
  */
 
-import type { TemplateContext } from "../types/ai-tools.js";
+import type { PlatformTemplateContext } from "../types/ai-tools.js";
 
 /**
  * Module-level resolved Python command, set by the init flow after probing.
@@ -122,7 +122,7 @@ export function replacePythonCommandLiterals(content: string): string {
  * When called without a context, only resolves {{PYTHON_CMD}} (legacy behavior
  * for settings.json, hooks.json, etc.).
  *
- * When called with a TemplateContext, additionally resolves:
+ * When called with a PlatformTemplateContext, additionally resolves:
  * - {{CMD_REF:name}}         → platform-specific command reference
  * - {{EXECUTOR_AI}}          → AI executor description
  * - {{USER_ACTION_LABEL}}    → user action label
@@ -159,7 +159,7 @@ const CONDITIONAL_REGEXES = Object.fromEntries(
 
 export function resolvePlaceholders(
   content: string,
-  context?: TemplateContext,
+  context?: PlatformTemplateContext,
 ): string {
   let result = replacePythonCommandLiterals(
     content.replace(RE_PYTHON_CMD, getPythonCommandForPlatform()),
@@ -223,7 +223,7 @@ export function resolvePlaceholders(
  */
 export function resolvePlaceholdersNeutral(
   content: string,
-  context?: TemplateContext,
+  context?: PlatformTemplateContext,
 ): string {
   let result = replacePythonCommandLiteralsForShell(
     content.replace(RE_PYTHON_CMD, getPythonCommandForShell()),
@@ -422,7 +422,7 @@ export interface ResolvedSkillFile {
  */
 function filterCommands(
   templates: CommonTemplate[],
-  ctx: TemplateContext,
+  ctx: PlatformTemplateContext,
 ): CommonTemplate[] {
   if (ctx.agentCapable) {
     return templates.filter((t) => t.name !== "start");
@@ -437,7 +437,7 @@ function filterCommands(
  * `start` is filtered out on agent-capable platforms — the session-start hook
  * injects the workflow overview instead.
  */
-export function resolveAllAsSkills(ctx: TemplateContext): ResolvedTemplate[] {
+export function resolveAllAsSkills(ctx: PlatformTemplateContext): ResolvedTemplate[] {
   const templates = [
     ...filterCommands(getCommandTemplates(), ctx),
     ...getSkillTemplates(),
@@ -460,7 +460,7 @@ export function resolveAllAsSkills(ctx: TemplateContext): ResolvedTemplate[] {
  *
  * `start` is filtered out on agent-capable platforms.
  */
-export function resolveCommands(ctx: TemplateContext): ResolvedTemplate[] {
+export function resolveCommands(ctx: PlatformTemplateContext): ResolvedTemplate[] {
   return filterCommands(getCommandTemplates(), ctx).map((tmpl) => ({
     name: tmpl.name,
     content: injectTrellisSwitchGuard(
@@ -474,7 +474,7 @@ export function resolveCommands(ctx: TemplateContext): ResolvedTemplate[] {
  * Resolve only the 5 skill templates with trellis- prefix + SKILL.md frontmatter.
  * Used by "both" platforms for the auto-triggered skills.
  */
-export function resolveSkills(ctx: TemplateContext): ResolvedTemplate[] {
+export function resolveSkills(ctx: PlatformTemplateContext): ResolvedTemplate[] {
   return getSkillTemplates().map((tmpl) => ({
     name: `trellis-${tmpl.name}`,
     content: injectTrellisSwitchGuard(
@@ -494,7 +494,7 @@ export function resolveSkills(ctx: TemplateContext): ResolvedTemplate[] {
  * writes (Gemini); platform-private skill roots should keep
  * {@link resolveSkills}.
  */
-export function resolveSkillsNeutral(ctx: TemplateContext): ResolvedTemplate[] {
+export function resolveSkillsNeutral(ctx: PlatformTemplateContext): ResolvedTemplate[] {
   return getSkillTemplates().map((tmpl) => ({
     name: `trellis-${tmpl.name}`,
     content: injectTrellisSwitchGuard(
@@ -515,7 +515,7 @@ export function resolveSkillsNeutral(ctx: TemplateContext): ResolvedTemplate[] {
  * files into `.agents/skills/`, so byte-identity isn't required there.
  */
 export function resolveAllAsSkillsNeutral(
-  ctx: TemplateContext,
+  ctx: PlatformTemplateContext,
 ): ResolvedTemplate[] {
   const templates = [
     ...filterCommands(getCommandTemplates(), ctx),
@@ -552,7 +552,7 @@ export function resolveAllAsSkillsNeutral(
  * `collectTemplates` and never wrote the file).
  */
 export function resolveCodexTrellisStartSkill(
-  ctx: TemplateContext,
+  ctx: PlatformTemplateContext,
 ): ResolvedTemplate | null {
   const startTemplate = getCommandTemplates().find((t) => t.name === "start");
   if (!startTemplate) return null;
@@ -593,7 +593,7 @@ export function resolveCodexTrellisStartSkill(
  * through placeholder resolution so init and update get byte-identical output.
  */
 export function resolveBundledSkills(
-  ctx: TemplateContext,
+  ctx: PlatformTemplateContext,
 ): ResolvedSkillFile[] {
   return getBundledSkillTemplates().flatMap((skill) =>
     skill.files.map((file) => ({

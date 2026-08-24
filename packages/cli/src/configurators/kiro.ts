@@ -1,5 +1,5 @@
 import path from "node:path";
-import { AI_TOOLS } from "../types/ai-tools.js";
+import { getTemplateContext } from "../types/ai-tools.js";
 import {
   resolvePlaceholders,
   resolveAllAsSkills,
@@ -17,14 +17,13 @@ import { getAllAgents } from "../templates/kiro/index.js";
  * - hooks/*.py — shared hook scripts (referenced by agent JSON hooks)
  */
 export async function configureKiro(cwd: string): Promise<void> {
-  const config = AI_TOOLS.kiro;
   // Kiro configDir is ".kiro/skills" — agents and hooks go under ".kiro/"
   const kiroRoot = path.join(cwd, ".kiro");
 
   await writeSkills(
     path.join(kiroRoot, "skills"),
-    resolveAllAsSkills(config.templateContext),
-    resolveBundledSkills(config.templateContext),
+    resolveAllAsSkills(getTemplateContext("kiro")),
+    resolveBundledSkills(getTemplateContext("kiro")),
   );
 
   // Agents (JSON format, with {{PYTHON_CMD}} resolved)

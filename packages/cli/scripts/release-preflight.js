@@ -412,6 +412,8 @@ function verifyTarballManifestFor(tarball, packageKind) {
       "package/dist/templates/claude/agents/",
       "package/dist/templates/codex/agents/",
       "package/dist/templates/codex/hooks/",
+      "package/dist/templates/codex/config.toml",
+      "package/dist/templates/codex/hooks.json",
       "package/dist/templates/common/skills/",
       "package/dist/templates/common/bundled-skills/",
       "package/dist/templates/shared-hooks/",

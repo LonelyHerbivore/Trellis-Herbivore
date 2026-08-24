@@ -1,5 +1,5 @@
 import path from "node:path";
-import { AI_TOOLS } from "../types/ai-tools.js";
+import { getTemplateContext } from "../types/ai-tools.js";
 import { getAllHooks, getHooksConfig } from "../templates/copilot/index.js";
 import { ensureDir, writeFile } from "../utils/file-writer.js";
 import {
@@ -23,8 +23,7 @@ import {
  * - hooks config — hooks.json
  */
 export async function configureCopilot(cwd: string): Promise<void> {
-  const config = AI_TOOLS.copilot;
-  const ctx = config.templateContext;
+  const ctx = getTemplateContext("copilot");
   const copilotRoot = path.join(cwd, ".github", "copilot");
 
   const promptsDir = path.join(cwd, ".github", "prompts");

@@ -70,6 +70,7 @@ describe("init() integration", () => {
       }
       return "";
     }) as typeof execSync);
+    vi.mocked(ensureCodexRequestUserInput).mockClear();
     vi.mocked(ensureCodexRequestUserInput).mockResolvedValue({
       status: "already-enabled",
       source: "codex-config",
@@ -94,11 +95,11 @@ describe("init() integration", () => {
     expect(fs.existsSync(path.join(tmpDir, PATHS.TASKS))).toBe(true);
     expect(fs.existsSync(path.join(tmpDir, PATHS.SPEC))).toBe(true);
 
-    // Default platforms: cursor + claude
-    expect(fs.existsSync(path.join(tmpDir, ".cursor"))).toBe(true);
+    // Default platforms: Claude Code + Codex
+    expect(fs.existsSync(path.join(tmpDir, ".cursor"))).toBe(false);
     expect(fs.existsSync(path.join(tmpDir, ".claude"))).toBe(true);
-    expect(fs.existsSync(path.join(tmpDir, ".codex"))).toBe(false);
-    expect(fs.existsSync(path.join(tmpDir, ".agents", "skills"))).toBe(false);
+    expect(fs.existsSync(path.join(tmpDir, ".codex"))).toBe(true);
+    expect(fs.existsSync(path.join(tmpDir, ".agents", "skills"))).toBe(true);
     expect(fs.existsSync(path.join(tmpDir, ".agent", "workflows"))).toBe(false);
     expect(fs.existsSync(path.join(tmpDir, ".kiro", "skills"))).toBe(false);
     expect(fs.existsSync(path.join(tmpDir, ".gemini"))).toBe(false);
@@ -110,16 +111,27 @@ describe("init() integration", () => {
     expect(fs.existsSync(path.join(tmpDir, ".github", "copilot"))).toBe(false);
     expect(fs.existsSync(path.join(tmpDir, ".factory"))).toBe(false);
     expect(fs.existsSync(path.join(tmpDir, ".pi"))).toBe(false);
-    expect(ensureCodexRequestUserInput).not.toHaveBeenCalled();
+    expect(ensureCodexRequestUserInput).toHaveBeenCalledTimes(1);
 
     // Root files
     expect(fs.existsSync(path.join(tmpDir, "AGENTS.md"))).toBe(true);
     expect(fs.existsSync(path.join(tmpDir, FILE_NAMES.CLAUDE))).toBe(true);
-    expect(
-      fs.readFileSync(path.join(tmpDir, FILE_NAMES.AGENTS), "utf-8"),
-    ).toBe(fs.readFileSync(path.join(tmpDir, FILE_NAMES.CLAUDE), "utf-8"));
-
-    // Built-in multi-file skill is installed for default platforms.
+    const agentsContent = fs.readFileSync(
+      path.join(tmpDir, FILE_NAMES.AGENTS),
+      "utf-8",
+    );
+    const claudeContent = fs.readFileSync(
+      path.join(tmpDir, FILE_NAMES.CLAUDE),
+      "utf-8",
+    );
+    expect(agentsContent).not.toBe(claudeContent);
+    expect(agentsContent).toContain(
+      "Codex fallback: if Trellis context was not injected",
+    );
+    expect(claudeContent).not.toContain(
+      "Codex fallback: if Trellis context was not injected",
+    );
+    // Built-in multi-file skill is installed for the default platforms.
     expect(
       fs.existsSync(
         path.join(tmpDir, ".claude", "skills", "trellis-meta", "SKILL.md"),
@@ -129,7 +141,7 @@ describe("init() integration", () => {
       fs.existsSync(
         path.join(
           tmpDir,
-          ".cursor",
+          ".agents",
           "skills",
           "trellis-meta",
           "references",
@@ -152,6 +164,18 @@ describe("init() integration", () => {
     expect(logOutput).not.toContain("Sound familiar?");
     expect(logOutput).not.toContain("You'll never say these again!!");
     expect(logOutput).not.toContain("Wrote CLAUDE.md, AI ignored it");
+  });
+
+  it("#1c bootstrap onboarding only lists Claude Code and Codex host docs", async () => {
+    await init({ yes: true, user: "dev" });
+
+    const bootstrapPrd = fs.readFileSync(
+      path.join(tmpDir, PATHS.TASKS, "00-bootstrap-guidelines", "prd.md"),
+      "utf-8",
+    );
+    expect(bootstrapPrd).toContain("AGENTS.md");
+    expect(bootstrapPrd).not.toContain("Cursor");
+    expect(bootstrapPrd).not.toContain("Windsurf");
   });
 
   it("#2 single platform creates only that platform directory", async () => {
@@ -386,9 +410,13 @@ describe("init() integration", () => {
       ),
     ).toBe(true);
     expect(fs.existsSync(path.join(tmpDir, ".codex", "skills"))).toBe(false);
-    expect(fs.existsSync(path.join(tmpDir, ".codex", "config.toml"))).toBe(
-      true,
+    const generatedCodexConfig = fs.readFileSync(
+      path.join(tmpDir, ".codex", "config.toml"),
+      "utf-8",
     );
+    expect(generatedCodexConfig).toContain("min_wait_timeout_ms = 50000");
+    expect(generatedCodexConfig).toContain("default_wait_timeout_ms = 120000");
+    expect(generatedCodexConfig).toContain("max_wait_timeout_ms = 240000");
     expect(
       fs.existsSync(
         path.join(tmpDir, ".codex", "agents", "trellis-check.toml"),

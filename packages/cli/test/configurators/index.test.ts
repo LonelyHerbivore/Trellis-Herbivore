@@ -5,6 +5,7 @@ import {
   PLATFORM_IDS,
   PLATFORM_MANAGED_DIRS,
   collectPlatformTemplates,
+  getAllToolChoices,
   getInitToolChoices,
   getPlatformManagedPaths,
   getPlatformsWithPythonHooks,
@@ -239,9 +240,16 @@ describe("resolveCliFlag", () => {
 
 describe("getInitToolChoices", () => {
   const choices = getInitToolChoices();
+  const allChoices = getAllToolChoices();
 
-  it("returns one entry per platform", () => {
-    expect(choices).toHaveLength(PLATFORM_IDS.length);
+  it("returns only registry entries marked for user-facing init", () => {
+    expect(choices.map((choice) => choice.platformId)).toEqual(
+      PLATFORM_IDS.filter((id) => AI_TOOLS[id].initEnabled),
+    );
+  });
+
+  it("keeps all registry choices available for compatibility paths", () => {
+    expect(allChoices).toHaveLength(PLATFORM_IDS.length);
   });
 
   it("each entry has required fields", () => {

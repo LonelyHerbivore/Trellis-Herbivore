@@ -1,5 +1,5 @@
 import path from "node:path";
-import { AI_TOOLS } from "../types/ai-tools.js";
+import { getTemplateContext } from "../types/ai-tools.js";
 import {
   getAllAgents,
   getAllHooks,
@@ -34,8 +34,8 @@ export async function configureCodex(cwd: string): Promise<void> {
   const sharedSkillsRoot = path.join(cwd, ".agents", "skills");
   await writeSkills(
     sharedSkillsRoot,
-    resolveAllAsSkillsNeutral(AI_TOOLS.codex.templateContext),
-    resolveBundledSkills(AI_TOOLS.codex.templateContext),
+    resolveAllAsSkillsNeutral(getTemplateContext("codex")),
+    resolveBundledSkills(getTemplateContext("codex")),
   );
 
   // Additionally write `trellis-start` to .agents/skills/ — Codex-specific.
@@ -47,7 +47,7 @@ export async function configureCodex(cwd: string): Promise<void> {
   // Must stay in sync with `collectPlatformTemplates.codex.collectTemplates`
   // (configurators/index.ts) — both share `resolveCodexTrellisStartSkill`.
   const trellisStart = resolveCodexTrellisStartSkill(
-    AI_TOOLS.codex.templateContext,
+    getTemplateContext("codex"),
   );
   if (trellisStart) {
     const trellisStartDir = path.join(sharedSkillsRoot, trellisStart.name);

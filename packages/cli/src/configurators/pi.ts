@@ -1,5 +1,5 @@
 import path from "node:path";
-import { AI_TOOLS } from "../types/ai-tools.js";
+import { AI_TOOLS, getTemplateContext } from "../types/ai-tools.js";
 import { ensureDir, writeFile } from "../utils/file-writer.js";
 import {
   applyPullBasedPreludeMarkdown,
@@ -19,8 +19,7 @@ import {
 } from "../templates/pi/index.js";
 
 export function collectPiTemplates(): Map<string, string> {
-  const config = AI_TOOLS.pi;
-  const ctx = config.templateContext;
+  const ctx = getTemplateContext("pi");
   const files = new Map<string, string>();
 
   for (const command of resolveCommands(ctx)) {
@@ -56,7 +55,7 @@ export function collectPiTemplates(): Map<string, string> {
 
 export async function configurePi(cwd: string): Promise<void> {
   const config = AI_TOOLS.pi;
-  const ctx = config.templateContext;
+  const ctx = getTemplateContext("pi");
   const configRoot = path.join(cwd, config.configDir);
 
   ensureDir(path.join(configRoot, "prompts"));

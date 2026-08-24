@@ -13,8 +13,10 @@ import path from "node:path";
 import {
   AI_TOOLS,
   getManagedPaths,
+  getTemplateContext,
   type AITool,
   type CliFlag,
+  type PlatformTemplateContext,
 } from "../types/ai-tools.js";
 
 // Platform configurators
@@ -136,7 +138,7 @@ function replaceInMap(map: Map<string, string>): Map<string, string> {
 
 /** Helper: collect commands + skills for "both" platforms */
 function collectBothTemplates(
-  ctx: import("../types/ai-tools.js").TemplateContext,
+  ctx: PlatformTemplateContext,
   cmdPath: (name: string) => string,
   skillRoot: string,
   wrapCmd?: (filePath: string, content: string) => string,
@@ -160,7 +162,7 @@ const PLATFORM_FUNCTIONS: Record<AITool, PlatformFunctions> = {
   "claude-code": {
     configure: configureClaude,
     collectTemplates: () => {
-      const ctx = AI_TOOLS["claude-code"].templateContext;
+      const ctx = getTemplateContext("claude-code");
       const files = collectBothTemplates(
         ctx,
         (n) => `.claude/commands/trellis/${n}.md`,
@@ -190,7 +192,7 @@ const PLATFORM_FUNCTIONS: Record<AITool, PlatformFunctions> = {
     configure: configureCursor,
     collectTemplates: () => {
       const files = collectBothTemplates(
-        AI_TOOLS.cursor.templateContext,
+        getTemplateContext("cursor"),
         (n) => `.cursor/commands/trellis-${n}.md`,
         ".cursor/skills",
       );
@@ -215,7 +217,7 @@ const PLATFORM_FUNCTIONS: Record<AITool, PlatformFunctions> = {
     configure: configureCodex,
     collectTemplates: () => {
       const files = new Map<string, string>();
-      const ctx = AI_TOOLS.codex.templateContext;
+      const ctx = getTemplateContext("codex");
       for (const [filePath, content] of collectSkillTemplates(
         ".agents/skills",
         resolveAllAsSkillsNeutral(ctx),
@@ -259,7 +261,7 @@ const PLATFORM_FUNCTIONS: Record<AITool, PlatformFunctions> = {
     configure: configureKilo,
     collectTemplates: () =>
       collectBothTemplates(
-        AI_TOOLS.kilo.templateContext,
+        getTemplateContext("kilo"),
         (n) => `.kilocode/workflows/${n}.md`,
         ".kilocode/skills",
       ),
@@ -268,7 +270,7 @@ const PLATFORM_FUNCTIONS: Record<AITool, PlatformFunctions> = {
     configure: configureKiro,
     collectTemplates: () => {
       const files = new Map<string, string>();
-      const ctx = AI_TOOLS.kiro.templateContext;
+      const ctx = getTemplateContext("kiro");
       for (const [filePath, content] of collectSkillTemplates(
         ".kiro/skills",
         resolveAllAsSkills(ctx),
@@ -291,7 +293,7 @@ const PLATFORM_FUNCTIONS: Record<AITool, PlatformFunctions> = {
   gemini: {
     configure: configureGemini,
     collectTemplates: () => {
-      const ctx = AI_TOOLS.gemini.templateContext;
+      const ctx = getTemplateContext("gemini");
       const files = new Map<string, string>();
       for (const cmd of resolveCommands(ctx)) {
         const toml = `description = "Trellis: ${cmd.name}"\n\nprompt = """\n${cmd.content}\n"""\n`;
@@ -324,7 +326,7 @@ const PLATFORM_FUNCTIONS: Record<AITool, PlatformFunctions> = {
     configure: configureAntigravity,
     collectTemplates: () =>
       collectBothTemplates(
-        AI_TOOLS.antigravity.templateContext,
+        getTemplateContext("antigravity"),
         (n) => `.agent/workflows/${n}.md`,
         ".agent/skills",
       ),
@@ -333,7 +335,7 @@ const PLATFORM_FUNCTIONS: Record<AITool, PlatformFunctions> = {
     configure: configureWindsurf,
     collectTemplates: () =>
       collectBothTemplates(
-        AI_TOOLS.windsurf.templateContext,
+        getTemplateContext("windsurf"),
         (n) => `.windsurf/workflows/trellis-${n}.md`,
         ".windsurf/skills",
       ),
@@ -342,7 +344,7 @@ const PLATFORM_FUNCTIONS: Record<AITool, PlatformFunctions> = {
     configure: configureQoder,
     collectTemplates: () => {
       const files = collectBothTemplates(
-        AI_TOOLS.qoder.templateContext,
+        getTemplateContext("qoder"),
         (n) => `.qoder/commands/trellis-${n}.md`,
         ".qoder/skills",
         (filePath, content) => {
@@ -368,7 +370,7 @@ const PLATFORM_FUNCTIONS: Record<AITool, PlatformFunctions> = {
     configure: configureCodebuddy,
     collectTemplates: () => {
       const files = collectBothTemplates(
-        AI_TOOLS.codebuddy.templateContext,
+        getTemplateContext("codebuddy"),
         (n) => `.codebuddy/commands/trellis/${n}.md`,
         ".codebuddy/skills",
       );
@@ -392,7 +394,7 @@ const PLATFORM_FUNCTIONS: Record<AITool, PlatformFunctions> = {
   copilot: {
     configure: configureCopilot,
     collectTemplates: () => {
-      const ctx = AI_TOOLS.copilot.templateContext;
+      const ctx = getTemplateContext("copilot");
       const files = new Map<string, string>();
       for (const cmd of resolveCommands(ctx)) {
         files.set(`.github/prompts/${cmd.name}.prompt.md`, cmd.content);
@@ -433,7 +435,7 @@ const PLATFORM_FUNCTIONS: Record<AITool, PlatformFunctions> = {
     configure: configureDroid,
     collectTemplates: () => {
       const files = collectBothTemplates(
-        AI_TOOLS.droid.templateContext,
+        getTemplateContext("droid"),
         (n) => `.factory/commands/trellis/${n}.md`,
         ".factory/skills",
       );
@@ -463,6 +465,11 @@ const PLATFORM_FUNCTIONS: Record<AITool, PlatformFunctions> = {
 
 /** All platform IDs */
 export const PLATFORM_IDS = Object.keys(AI_TOOLS) as AITool[];
+
+/** Platforms exposed by `trellis init`, derived from the platform registry. */
+export const INIT_PLATFORM_IDS: AITool[] = PLATFORM_IDS.filter(
+  (id) => AI_TOOLS[id].initEnabled,
+);
 
 /** All platform config directory names (e.g., [".claude", ".cursor", ".opencode"]) */
 export const CONFIG_DIRS = PLATFORM_IDS.map((id) => AI_TOOLS[id].configDir);
@@ -582,21 +589,36 @@ export function collectPlatformTemplates(
   return map ? replaceInMap(map) : map;
 }
 
-/**
- * Build TOOLS array for interactive init prompt, derived from AI_TOOLS registry
- */
-export function getInitToolChoices(): {
+export interface PlatformToolChoice {
   key: CliFlag;
   name: string;
   defaultChecked: boolean;
   platformId: AITool;
-}[] {
-  return PLATFORM_IDS.map((id) => ({
+}
+
+/** Build platform choices from the registry. */
+function buildToolChoices(
+  platformIds: readonly AITool[],
+): PlatformToolChoice[] {
+  return platformIds.map((id) => ({
     key: AI_TOOLS[id].cliFlag,
     name: AI_TOOLS[id].name,
     defaultChecked: AI_TOOLS[id].defaultChecked,
     platformId: id,
   }));
+}
+
+/** Build the user-facing platform choices for `trellis init`. */
+export function getInitToolChoices(): PlatformToolChoice[] {
+  return buildToolChoices(INIT_PLATFORM_IDS);
+}
+
+/**
+ * Build all registry choices for direct internal callers and compatibility
+ * tests. These choices are not exposed by the public `trellis init` CLI.
+ */
+export function getAllToolChoices(): PlatformToolChoice[] {
+  return buildToolChoices(PLATFORM_IDS);
 }
 
 /**

@@ -10,7 +10,7 @@
  */
 
 import { describe, expect, it } from "vitest";
-import { AI_TOOLS } from "../src/types/ai-tools.js";
+import { AI_TOOLS, getTemplateContext } from "../src/types/ai-tools.js";
 import {
   PLATFORM_IDS,
 } from "../src/configurators/index.js";
@@ -76,13 +76,11 @@ describe("registry internal consistency", () => {
     }
   });
 
-  // templateContext.cliFlag mirrors the outer AIToolConfig.cliFlag — the two
-  // must stay in sync so {{CLI_FLAG}} substitution in shipped templates
-  // agrees with the --claude/--cursor/--codex CLI flag users invoke.
-  it("templateContext.cliFlag matches AIToolConfig.cliFlag for every platform", () => {
+  it("materializes CLI flags from registry metadata", () => {
     for (const id of PLATFORM_IDS) {
       const config = AI_TOOLS[id];
-      expect(config.templateContext.cliFlag).toBe(config.cliFlag);
+      expect(config.templateContext).not.toHaveProperty("cliFlag");
+      expect(getTemplateContext(id).cliFlag).toBe(config.cliFlag);
     }
   });
 

@@ -241,6 +241,32 @@ describe("ensureCodexRequestUserInput", () => {
     expect(inquirer.prompt).toHaveBeenCalledOnce();
   });
 
+  it("shares one confirmation for overlapping checks in the same home", async () => {
+    let markPromptReady!: () => void;
+    let resolvePrompt!: (answer: { apply: boolean }) => void;
+    const promptReady = new Promise<void>((resolve) => {
+      markPromptReady = resolve;
+    });
+    const promptAnswer = new Promise<{ apply: boolean }>((resolve) => {
+      resolvePrompt = resolve;
+    });
+    vi.mocked(inquirer.prompt).mockImplementationOnce(
+      (() => {
+        markPromptReady();
+        return promptAnswer;
+      }) as typeof inquirer.prompt,
+    );
+
+    const first = ensureCodexRequestUserInput(options());
+    await promptReady;
+    const second = ensureCodexRequestUserInput(options());
+    resolvePrompt({ apply: true });
+
+    const [firstResult, secondResult] = await Promise.all([first, second]);
+    expect(secondResult).toEqual(firstResult);
+    expect(inquirer.prompt).toHaveBeenCalledOnce();
+  });
+
   it("uses an absolute Windows Python override as one cc-switch executable", async () => {
     const pythonCommand = "C:\\Program Files\\Python312\\python.exe";
     const databasePath = path.join(homeDir, ".cc-switch", "cc-switch.db");

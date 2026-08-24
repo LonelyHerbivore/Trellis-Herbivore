@@ -81,14 +81,10 @@ export interface TemplateContext {
   agentCapable: boolean;
   /** Platform has hook system (SessionStart, PreToolUse) */
   hasHooks: boolean;
-  /**
-   * CLI flag value for this platform (e.g. "claude", "codex", "kiro").
-   * Substituted into template commands via {{CLI_FLAG}} so rendered skill /
-   * command files can pass `--platform <flag>` to scripts that need to know
-   * the invoking platform, removing the need to re-detect at runtime.
-   * Duplicates the top-level `AIToolConfig.cliFlag` for convenience — the
-   * invariant is maintained in `AI_TOOLS` config blocks.
-   */
+}
+
+/** Template context with the CLI flag materialized from the platform registry. */
+export interface PlatformTemplateContext extends TemplateContext {
   cliFlag: CliFlag;
 }
 
@@ -112,6 +108,8 @@ export interface AIToolConfig {
   extraManagedPaths?: string[];
   /** CLI flag name for --flag options (e.g., "claude" for --claude) */
   cliFlag: CliFlag;
+  /** Whether this platform is exposed by the user-facing `trellis init`. */
+  initEnabled: boolean;
   /** Whether this tool is checked by default in interactive init prompt */
   defaultChecked: boolean;
   /** Whether this tool uses Python hooks (affects Windows encoding detection) */
@@ -128,8 +126,7 @@ export interface AIToolConfig {
  * 1. src/configurators/{platform}.ts — configure function
  * 2. src/templates/{platform}/ — template files
  * 3. Register in src/configurators/index.ts — PLATFORM_FUNCTIONS
- * 4. Add CLI flag in src/cli/index.ts
- * 5. Add to InitOptions in src/commands/init.ts
+ * 4. The public init flag is derived from `initEnabled` and `cliFlag`.
  */
 export const AI_TOOLS: Record<AITool, AIToolConfig> = {
   "claude-code": {
@@ -137,6 +134,7 @@ export const AI_TOOLS: Record<AITool, AIToolConfig> = {
     templateDirs: ["common", "claude"],
     configDir: ".claude",
     cliFlag: "claude",
+    initEnabled: true,
     defaultChecked: true,
     hasPythonHooks: true,
     templateContext: {
@@ -145,7 +143,6 @@ export const AI_TOOLS: Record<AITool, AIToolConfig> = {
       userActionLabel: "Slash commands",
       agentCapable: true,
       hasHooks: true,
-      cliFlag: "claude",
     },
   },
   cursor: {
@@ -153,7 +150,8 @@ export const AI_TOOLS: Record<AITool, AIToolConfig> = {
     templateDirs: ["common", "cursor"],
     configDir: ".cursor",
     cliFlag: "cursor",
-    defaultChecked: true,
+    initEnabled: false,
+    defaultChecked: false,
     hasPythonHooks: true,
     templateContext: {
       cmdRefPrefix: "/trellis-",
@@ -161,7 +159,6 @@ export const AI_TOOLS: Record<AITool, AIToolConfig> = {
       userActionLabel: "Slash commands",
       agentCapable: true,
       hasHooks: true,
-      cliFlag: "cursor",
     },
   },
   opencode: {
@@ -169,6 +166,7 @@ export const AI_TOOLS: Record<AITool, AIToolConfig> = {
     templateDirs: ["common", "opencode"],
     configDir: ".opencode",
     cliFlag: "opencode",
+    initEnabled: false,
     defaultChecked: false,
     hasPythonHooks: false,
     templateContext: {
@@ -177,16 +175,16 @@ export const AI_TOOLS: Record<AITool, AIToolConfig> = {
       userActionLabel: "Slash commands",
       agentCapable: true,
       hasHooks: false,
-      cliFlag: "opencode",
     },
   },
   codex: {
-    name: "Codex (also writes .agents/skills/ — read by Cursor, Gemini CLI, GitHub Copilot, Amp, Kimi Code)",
+    name: "Codex",
     templateDirs: ["common", "codex"],
     configDir: ".codex",
     supportsAgentSkills: true,
     cliFlag: "codex",
-    defaultChecked: false,
+    initEnabled: true,
+    defaultChecked: true,
     hasPythonHooks: true,
     templateContext: {
       cmdRefPrefix: "$",
@@ -194,7 +192,6 @@ export const AI_TOOLS: Record<AITool, AIToolConfig> = {
       userActionLabel: "Skills",
       agentCapable: true,
       hasHooks: false,
-      cliFlag: "codex",
     },
   },
   kilo: {
@@ -202,6 +199,7 @@ export const AI_TOOLS: Record<AITool, AIToolConfig> = {
     templateDirs: ["common", "kilo"],
     configDir: ".kilocode",
     cliFlag: "kilo",
+    initEnabled: false,
     defaultChecked: false,
     hasPythonHooks: false,
     templateContext: {
@@ -210,7 +208,6 @@ export const AI_TOOLS: Record<AITool, AIToolConfig> = {
       userActionLabel: "Workflows",
       agentCapable: false,
       hasHooks: false,
-      cliFlag: "kilo",
     },
   },
   kiro: {
@@ -219,6 +216,7 @@ export const AI_TOOLS: Record<AITool, AIToolConfig> = {
     configDir: ".kiro/skills",
     extraManagedPaths: [".kiro/agents", ".kiro/hooks"],
     cliFlag: "kiro",
+    initEnabled: false,
     defaultChecked: false,
     hasPythonHooks: true,
     templateContext: {
@@ -227,7 +225,6 @@ export const AI_TOOLS: Record<AITool, AIToolConfig> = {
       userActionLabel: "Skills",
       agentCapable: true,
       hasHooks: true,
-      cliFlag: "kiro",
     },
   },
   gemini: {
@@ -236,6 +233,7 @@ export const AI_TOOLS: Record<AITool, AIToolConfig> = {
     configDir: ".gemini",
     supportsAgentSkills: true,
     cliFlag: "gemini",
+    initEnabled: false,
     defaultChecked: false,
     hasPythonHooks: true,
     templateContext: {
@@ -244,7 +242,6 @@ export const AI_TOOLS: Record<AITool, AIToolConfig> = {
       userActionLabel: "Slash commands",
       agentCapable: true,
       hasHooks: true,
-      cliFlag: "gemini",
     },
   },
   antigravity: {
@@ -253,6 +250,7 @@ export const AI_TOOLS: Record<AITool, AIToolConfig> = {
     configDir: ".agent/workflows",
     extraManagedPaths: [".agent/skills"],
     cliFlag: "antigravity",
+    initEnabled: false,
     defaultChecked: false,
     hasPythonHooks: false,
     templateContext: {
@@ -261,7 +259,6 @@ export const AI_TOOLS: Record<AITool, AIToolConfig> = {
       userActionLabel: "Workflows",
       agentCapable: false,
       hasHooks: false,
-      cliFlag: "antigravity",
     },
   },
   windsurf: {
@@ -270,6 +267,7 @@ export const AI_TOOLS: Record<AITool, AIToolConfig> = {
     configDir: ".windsurf/workflows",
     extraManagedPaths: [".windsurf/skills"],
     cliFlag: "windsurf",
+    initEnabled: false,
     defaultChecked: false,
     hasPythonHooks: false,
     templateContext: {
@@ -278,7 +276,6 @@ export const AI_TOOLS: Record<AITool, AIToolConfig> = {
       userActionLabel: "Workflows",
       agentCapable: false,
       hasHooks: false,
-      cliFlag: "windsurf",
     },
   },
   qoder: {
@@ -286,6 +283,7 @@ export const AI_TOOLS: Record<AITool, AIToolConfig> = {
     templateDirs: ["common", "qoder"],
     configDir: ".qoder",
     cliFlag: "qoder",
+    initEnabled: false,
     defaultChecked: false,
     hasPythonHooks: true,
     templateContext: {
@@ -294,7 +292,6 @@ export const AI_TOOLS: Record<AITool, AIToolConfig> = {
       userActionLabel: "Skills",
       agentCapable: true,
       hasHooks: true,
-      cliFlag: "qoder",
     },
   },
   codebuddy: {
@@ -302,6 +299,7 @@ export const AI_TOOLS: Record<AITool, AIToolConfig> = {
     templateDirs: ["common", "codebuddy"],
     configDir: ".codebuddy",
     cliFlag: "codebuddy",
+    initEnabled: false,
     defaultChecked: false,
     hasPythonHooks: true,
     templateContext: {
@@ -310,7 +308,6 @@ export const AI_TOOLS: Record<AITool, AIToolConfig> = {
       userActionLabel: "Slash commands",
       agentCapable: true,
       hasHooks: true,
-      cliFlag: "codebuddy",
     },
   },
   copilot: {
@@ -324,6 +321,7 @@ export const AI_TOOLS: Record<AITool, AIToolConfig> = {
       ".github/skills",
     ],
     cliFlag: "copilot",
+    initEnabled: false,
     defaultChecked: false,
     hasPythonHooks: true,
     templateContext: {
@@ -332,7 +330,6 @@ export const AI_TOOLS: Record<AITool, AIToolConfig> = {
       userActionLabel: "Prompts",
       agentCapable: true,
       hasHooks: true,
-      cliFlag: "copilot",
     },
   },
   droid: {
@@ -340,6 +337,7 @@ export const AI_TOOLS: Record<AITool, AIToolConfig> = {
     templateDirs: ["common", "droid"],
     configDir: ".factory",
     cliFlag: "droid",
+    initEnabled: false,
     defaultChecked: false,
     hasPythonHooks: true,
     templateContext: {
@@ -348,7 +346,6 @@ export const AI_TOOLS: Record<AITool, AIToolConfig> = {
       userActionLabel: "Slash commands",
       agentCapable: true,
       hasHooks: true,
-      cliFlag: "droid",
     },
   },
   pi: {
@@ -356,6 +353,7 @@ export const AI_TOOLS: Record<AITool, AIToolConfig> = {
     templateDirs: ["common", "pi"],
     configDir: ".pi",
     cliFlag: "pi",
+    initEnabled: false,
     defaultChecked: false,
     hasPythonHooks: false,
     templateContext: {
@@ -364,7 +362,6 @@ export const AI_TOOLS: Record<AITool, AIToolConfig> = {
       userActionLabel: "Slash commands",
       agentCapable: true,
       hasHooks: true,
-      cliFlag: "pi",
     },
   },
 };
@@ -396,4 +393,12 @@ export function getManagedPaths(tool: AITool): string[] {
  */
 export function getTemplateDirs(tool: AITool): TemplateDir[] {
   return AI_TOOLS[tool].templateDirs;
+}
+
+/** Materialize render context from registry-owned platform metadata. */
+export function getTemplateContext(tool: AITool): PlatformTemplateContext {
+  return {
+    ...AI_TOOLS[tool].templateContext,
+    cliFlag: AI_TOOLS[tool].cliFlag,
+  };
 }

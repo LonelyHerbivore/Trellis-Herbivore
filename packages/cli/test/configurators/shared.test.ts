@@ -9,14 +9,14 @@ import {
   resolvePlaceholdersNeutral,
   resolveSkillsNeutral,
 } from "../../src/configurators/shared.js";
-import { AI_TOOLS } from "../../src/types/ai-tools.js";
-import type { TemplateContext } from "../../src/types/ai-tools.js";
+import { getTemplateContext } from "../../src/types/ai-tools.js";
+import type { PlatformTemplateContext } from "../../src/types/ai-tools.js";
 
 // ---------------------------------------------------------------------------
 // Fixtures
 // ---------------------------------------------------------------------------
 
-const claudeCtx: TemplateContext = {
+const claudeCtx: PlatformTemplateContext = {
   cmdRefPrefix: "/trellis:",
   executorAI: "Bash scripts or Task calls",
   userActionLabel: "Slash commands",
@@ -25,7 +25,7 @@ const claudeCtx: TemplateContext = {
   cliFlag: "claude",
 };
 
-const codexCtx: TemplateContext = {
+const codexCtx: PlatformTemplateContext = {
   cmdRefPrefix: "$",
   executorAI: "Bash scripts or tool calls",
   userActionLabel: "Skills",
@@ -34,7 +34,7 @@ const codexCtx: TemplateContext = {
   cliFlag: "codex",
 };
 
-const cursorCtx: TemplateContext = {
+const cursorCtx: PlatformTemplateContext = {
   cmdRefPrefix: "/trellis-",
   executorAI: "Bash scripts or file reads",
   userActionLabel: "Slash commands",
@@ -535,7 +535,7 @@ describe("resolveSkillsNeutral / resolveAllAsSkillsNeutral", () => {
   });
 
   it("resolveSkillsNeutral injects the trellis-switch guard", () => {
-    const skills = resolveSkillsNeutral(AI_TOOLS.codex.templateContext);
+    const skills = resolveSkillsNeutral(getTemplateContext("codex"));
     const guard = `${getPythonCommandForPlatform()} ./.trellis/scripts/assert_trellis_enabled.py`;
     expect(skills.length).toBeGreaterThan(0);
     for (const skill of skills) {
@@ -554,8 +554,8 @@ describe("resolveSkillsNeutral / resolveAllAsSkillsNeutral", () => {
   });
 
   it("resolveSkillsNeutral produces byte-identical output for Codex and Gemini", () => {
-    const codexSkills = resolveSkillsNeutral(AI_TOOLS.codex.templateContext);
-    const geminiSkills = resolveSkillsNeutral(AI_TOOLS.gemini.templateContext);
+    const codexSkills = resolveSkillsNeutral(getTemplateContext("codex"));
+    const geminiSkills = resolveSkillsNeutral(getTemplateContext("gemini"));
     expect(codexSkills.length).toBe(geminiSkills.length);
     for (let i = 0; i < codexSkills.length; i++) {
       expect(codexSkills[i].name).toBe(geminiSkills[i].name);
@@ -567,7 +567,7 @@ describe("resolveSkillsNeutral / resolveAllAsSkillsNeutral", () => {
     // The neutral output must not contain platform-prefixed tokens for any
     // command that CMD_REF references in the shared skills (Codex `$name`,
     // Claude `/trellis:name`, Cursor `/trellis-name`).
-    const neutral = resolveSkillsNeutral(AI_TOOLS.codex.templateContext);
+    const neutral = resolveSkillsNeutral(getTemplateContext("codex"));
     const cmdRefNames = [
       "start",
       "brainstorm",
@@ -595,8 +595,8 @@ describe("resolveSkillsNeutral / resolveAllAsSkillsNeutral", () => {
   });
 
   it("resolveAllAsSkillsNeutral keeps the 5 shared skills byte-identical to resolveSkillsNeutral", () => {
-    const all = resolveAllAsSkillsNeutral(AI_TOOLS.codex.templateContext);
-    const fiveOnly = resolveSkillsNeutral(AI_TOOLS.codex.templateContext);
+    const all = resolveAllAsSkillsNeutral(getTemplateContext("codex"));
+    const fiveOnly = resolveSkillsNeutral(getTemplateContext("codex"));
     const sharedNames = new Set(fiveOnly.map((s) => s.name));
     const allShared = all.filter((s) => sharedNames.has(s.name));
     expect(allShared.length).toBe(fiveOnly.length);

@@ -26,7 +26,7 @@ import {
   hasPendingMigrations,
 } from "../src/migrations/index.js";
 import { isManagedPath } from "../src/configurators/index.js";
-import { AI_TOOLS } from "../src/types/ai-tools.js";
+import { AI_TOOLS, getTemplateContext } from "../src/types/ai-tools.js";
 import { PATHS } from "../src/constants/paths.js";
 import {
   settingsTemplate as claudeSettingsTemplate,
@@ -4159,8 +4159,8 @@ describe("regression: platform additions (beta.9, beta.13, beta.16)", () => {
     expect(AI_TOOLS.pi.configDir).toBe(".pi");
     expect(AI_TOOLS.pi.cliFlag).toBe("pi");
     expect(AI_TOOLS.pi.hasPythonHooks).toBe(false);
-    expect(AI_TOOLS.pi.templateContext.agentCapable).toBe(true);
-    expect(AI_TOOLS.pi.templateContext.hasHooks).toBe(true);
+    expect(getTemplateContext("pi").agentCapable).toBe(true);
+    expect(getTemplateContext("pi").hasHooks).toBe(true);
   });
 
   it("[beta.9] all platforms have consistent required fields", () => {

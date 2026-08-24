@@ -1,5 +1,5 @@
 import path from "node:path";
-import { AI_TOOLS } from "../types/ai-tools.js";
+import { getTemplateContext } from "../types/ai-tools.js";
 import { ensureDir, writeFile } from "../utils/file-writer.js";
 import {
   resolveBundledSkills,
@@ -14,7 +14,7 @@ import {
  * - skills/trellis-{name}/SKILL.md — other 5 as auto-triggered skills
  */
 export async function configureAntigravity(cwd: string): Promise<void> {
-  const ctx = AI_TOOLS.antigravity.templateContext;
+  const ctx = getTemplateContext("antigravity");
 
   const workflowsDir = path.join(cwd, ".agent", "workflows");
   ensureDir(workflowsDir);

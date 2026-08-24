@@ -24,11 +24,21 @@ vi.mock("inquirer", () => ({
   default: { prompt: vi.fn().mockResolvedValue({ proceed: true }) },
 }));
 
+vi.mock("../../src/utils/codex-user-config.js", () => ({
+  ensureCodexRequestUserInput: vi.fn().mockResolvedValue({
+    status: "non-interactive",
+    source: "undetermined",
+    target: "test",
+    hooksStatus: "unknown",
+  }),
+}));
+
 vi.mock("node:child_process", () => ({
   execSync: vi.fn().mockImplementation((cmd: string) => {
     const py = process.platform === "win32" ? "python" : "python3";
     return cmd === `${py} --version` ? "Python 3.11.12" : "";
   }),
+  execFileSync: vi.fn(),
 }));
 
 import { init } from "../../src/commands/init.js";

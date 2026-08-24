@@ -8,6 +8,7 @@ import inquirer from "inquirer";
 import { createWorkflowStructure } from "../configurators/workflow.js";
 import {
   getInitToolChoices,
+  getAllToolChoices,
   resolveCliFlag,
   configurePlatform,
   getConfiguredPlatforms,
@@ -435,7 +436,7 @@ function getBootstrapPrdContent(
 子代理就会写出泛化代码；spec 真实完整，子代理才会贴近团队现有风格。
 
 不要一上来倾倒说明。先用一句简短欢迎语开场，确认仓库里是否已有约定文档
-（如 CLAUDE.md、.cursorrules 等），再以对话方式推进。
+（如 CLAUDE.md、AGENTS.md、CONTRIBUTING.md 等），再以对话方式推进。
 
 ---
 
@@ -495,14 +496,6 @@ ${checklistMarkdown}
 |------|------|
 | \`CLAUDE.md\` / \`CLAUDE.local.md\` | Claude Code |
 | \`AGENTS.md\` | Codex / Claude Code / 兼容 agent 的工具 |
-| \`.cursorrules\` | Cursor |
-| \`.cursor/rules/*.mdc\` | Cursor（规则目录） |
-| \`.windsurfrules\` | Windsurf |
-| \`.clinerules\` | Cline |
-| \`.roomodes\` | Roo Code |
-| \`.github/copilot-instructions.md\` | GitHub Copilot |
-| \`.vscode/settings.json\` → \`github.copilot.chat.codeGeneration.instructions\` | VS Code Copilot |
-| \`CONVENTIONS.md\` / \`.aider.conf.yml\` | aider |
 | \`CONTRIBUTING.md\` | 通用项目约定 |
 | \`.editorconfig\` | 编辑器格式规则 |
 
@@ -552,7 +545,7 @@ ${pythonCmd} ./.trellis/scripts/task.py archive 00-bootstrap-guidelines
 
 “欢迎使用 Trellis！刚才的初始化已经让我可以帮助你补齐项目 spec。这是一次性设置，
 做好之后，后续每次 AI 会话都会按团队规范工作，而不是产出泛化代码。开始前你手头有
-现成的约定文档（如 CLAUDE.md、.cursorrules、CONTRIBUTING.md）可以先让我读取吗？
+现成的约定文档（如 CLAUDE.md、AGENTS.md、CONTRIBUTING.md）可以先让我读取吗？
 如果没有，我就从代码库里开始归纳。”
 `;
 
@@ -679,7 +672,7 @@ initialized” 提示，接下来会开始在聊天里向你提问。这个入�
 
 ### 1. Trellis 是什么 + 工作流是什么
 
-Trellis 是叠加在 Claude Code / Cursor 等工具之上的一层工作流，用来让 AI agent
+Trellis 是叠加在 Claude Code / Codex 等工具之上的一层工作流，用来让 AI agent
 在每次会话里都遵循项目自己的规范，而不是反复产出泛化代码。
 
 - **三阶段流程**：Plan（brainstorm → \`prd.md\`）→ Execute（编码 + 检查）→
@@ -777,14 +770,15 @@ async function handleReinit(
   pythonCmd: string,
 ): Promise<boolean> {
   const TOOLS = getInitToolChoices();
+  const ALL_TOOLS = getAllToolChoices();
   const configuredPlatforms = getConfiguredPlatforms(cwd);
   const configuredNames = [...configuredPlatforms]
     .map((id) => AI_TOOLS[id].name)
     .join(", ");
 
   // Determine explicit platform flags
-  const explicitTools = TOOLS.filter(
-    (t) => options[t.key as keyof InitOptions],
+  const explicitTools = ALL_TOOLS.filter(
+    (t) => options[t.key],
   ).map((t) => t.key);
 
   let doAddPlatforms = explicitTools.length > 0;
@@ -994,21 +988,9 @@ async function handleReinit(
   return true;
 }
 
-interface InitOptions {
-  cursor?: boolean;
-  claude?: boolean;
-  opencode?: boolean;
-  codex?: boolean;
-  kilo?: boolean;
-  kiro?: boolean;
-  gemini?: boolean;
-  antigravity?: boolean;
-  windsurf?: boolean;
-  qoder?: boolean;
-  codebuddy?: boolean;
-  copilot?: boolean;
-  droid?: boolean;
-  pi?: boolean;
+// The remaining platform fields are compatibility-only for direct internal
+// callers; they are intentionally not registered as public `trellis init` flags.
+type InitOptions = Partial<Record<CliFlag, boolean>> & {
   yes?: boolean;
   user?: string;
   force?: boolean;
@@ -1020,15 +1002,7 @@ interface InitOptions {
   monorepo?: boolean;
   workflow?: string;
   workflowSource?: string;
-}
-
-// Compile-time check: every CliFlag must be a key of InitOptions.
-// If a new platform is added to CliFlag but not to InitOptions, this line errors.
-// Uses [X] extends [Y] to prevent distributive conditional behavior.
-type _AssertCliFlagsInOptions = [CliFlag] extends [keyof InitOptions]
-  ? true
-  : "ERROR: CliFlag has values not present in InitOptions";
-const _cliFlagCheck: _AssertCliFlagsInOptions = true;
+};
 
 /**
  * Write monorepo package configuration to config.yaml (non-destructive patch).
@@ -1104,7 +1078,7 @@ export async function init(options: InitOptions): Promise<void> {
   console.log(chalk.cyan(`\n${banner.trimEnd()}`));
   console.log(
     chalk.gray(
-      "\n   All-in-one AI framework & toolkit for Claude Code & Cursor\n",
+      "\n   All-in-one AI framework & toolkit for Claude Code & Codex\n",
     ),
   );
 
@@ -1400,10 +1374,11 @@ export async function init(options: InitOptions): Promise<void> {
 
   // Tool definitions derived from platform registry
   const TOOLS = getInitToolChoices();
+  const ALL_TOOLS = getAllToolChoices();
 
   // Build tools from explicit flags
-  const explicitTools = TOOLS.filter(
-    (t) => options[t.key as keyof InitOptions],
+  const explicitTools = ALL_TOOLS.filter(
+    (t) => options[t.key],
   ).map((t) => t.key);
 
   let tools: string[];
@@ -1412,7 +1387,7 @@ export async function init(options: InitOptions): Promise<void> {
     // Explicit flags take precedence (works with or without -y)
     tools = explicitTools;
   } else if (options.yes) {
-    // No explicit tools + -y: default to Cursor and Claude
+    // No explicit tools + -y: default to Claude Code and Codex
     tools = TOOLS.filter((t) => t.defaultChecked).map((t) => t.key);
   } else {
     // Interactive mode
